@@ -165,6 +165,56 @@ export async function addClient(
     return { success: false, error: "Aucune entreprise associée" };
   }
 
+  // Check for duplicates before creating
+  const existingClients = await getClients();
+  const duplicates: string[] = [];
+
+  const newFirst = (clientData.first_name || "").toLowerCase().trim();
+  const newLast = (clientData.last_name || "").toLowerCase().trim();
+  const newEmail = (clientData.email || "").toLowerCase().trim();
+  const newPhone = (clientData.phone || "").replace(/\s/g, "").trim();
+
+  for (const client of existingClients) {
+    const existFirst = (client.first_name || "").toLowerCase().trim();
+    const existLast = (client.last_name || "").toLowerCase().trim();
+    const existEmail = (client.email || "").toLowerCase().trim();
+    const existPhone = (client.phone || "").replace(/\s/g, "").trim();
+
+    // Check name match
+    if (
+      newFirst &&
+      newLast &&
+      existFirst === newFirst &&
+      existLast === newLast
+    ) {
+      duplicates.push(
+        `Le client "${client.first_name} ${client.last_name}" existe déjà`,
+      );
+    } else if (newLast && !newFirst && existLast === newLast) {
+      duplicates.push(
+        `Un client avec le nom "${client.last_name}" existe déjà`,
+      );
+    } else if (newFirst && !newLast && existFirst === newFirst) {
+      duplicates.push(
+        `Un client avec le prénom "${client.first_name}" existe déjà`,
+      );
+    }
+
+    // Check email match
+    if (newEmail && existEmail && existEmail === newEmail) {
+      duplicates.push(`L'email "${clientData.email}" est déjà utilisé`);
+    }
+
+    // Check phone match
+    if (newPhone && existPhone && existPhone === newPhone) {
+      duplicates.push(`Le téléphone "${clientData.phone}" est déjà utilisé`);
+    }
+  }
+
+  if (duplicates.length > 0) {
+    return { success: false, error: duplicates[0] };
+  }
+
   const { data, error } = await supabase
     .from("clients")
     .insert({

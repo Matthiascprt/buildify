@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Search, FileText } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -77,20 +77,23 @@ export function ClientDocuments({
     }).format(amount);
   };
 
-  const handleDocumentClick = (doc: ClientDocument) => {
-    onNavigate?.();
-    const path =
-      doc.type === "quote"
-        ? `/edition?type=quote&id=${doc.id}`
-        : `/edition?type=invoice&id=${doc.id}`;
+  const handleDocumentClick = useCallback(
+    (doc: ClientDocument) => {
+      onNavigate?.();
+      const path =
+        doc.type === "quote"
+          ? `/edition?type=quote&id=${doc.id}`
+          : `/edition?type=invoice&id=${doc.id}`;
 
-    // Use hard navigation to ensure full page reload when already on /edition
-    if (window.location.pathname === "/edition") {
-      window.location.assign(path);
-    } else {
-      router.push(path);
-    }
-  };
+      // Use hard navigation to ensure full page reload when already on /edition
+      if (window.location.pathname === "/edition") {
+        window.location.assign(path);
+      } else {
+        router.push(path);
+      }
+    },
+    [onNavigate, router],
+  );
 
   if (isLoading) {
     return (

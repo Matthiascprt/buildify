@@ -7,6 +7,7 @@ import {
   findOrCreateClient,
   updateQuote,
   updateInvoice,
+  getCurrentUser,
 } from "@/lib/supabase/api";
 import type { DocumentData } from "@/lib/types/document";
 
@@ -29,6 +30,12 @@ interface UpdateDocumentRequest {
 
 export async function POST(req: NextRequest) {
   try {
+    // Vérification de l'authentification
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+    }
+
     const body: CreateDocumentRequest = await req.json();
     const { type, content } = body;
 
@@ -76,6 +83,12 @@ export async function POST(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
+    // Vérification de l'authentification
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+    }
+
     const body: UpdateDocumentRequest = await req.json();
     const { documentId, type, content, clientInfo } = body;
 
@@ -200,6 +213,12 @@ interface LinkClientRequest {
 
 export async function PATCH(req: NextRequest) {
   try {
+    // Vérification de l'authentification
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+    }
+
     const body: LinkClientRequest = await req.json();
     const { documentId, type, clientId } = body;
 

@@ -99,18 +99,18 @@ function AccountMenu({
 }) {
   const router = useRouter();
   const { theme, setTheme } = useTheme();
-  const supabase = createClient();
   const [mounted, setMounted] = React.useState(false);
 
   React.useEffect(() => {
     setMounted(true);
   }, []);
 
-  const handleSignOut = async () => {
+  const handleSignOut = React.useCallback(async () => {
+    const supabase = createClient();
     await supabase.auth.signOut();
     router.push("/login");
     router.refresh();
-  };
+  }, [router]);
 
   const themes = [
     { value: "light", label: "Clair", icon: Sun },
@@ -178,14 +178,25 @@ function AccountMenu({
 
 export function Sidebar({ user }: SidebarProps) {
   const pathname = usePathname();
+  const { resolvedTheme } = useTheme();
+  const [mounted, setMounted] = React.useState(false);
   const initials = user?.email?.slice(0, 2).toUpperCase() || "U";
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const logoUrl =
+    mounted && resolvedTheme === "dark"
+      ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/buildify-assets/Logo/icon (2).svg`
+      : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/buildify-assets/Logo/icon (1).svg`;
 
   return (
     <aside className="hidden lg:flex fixed inset-y-0 left-0 z-40 w-60 flex-col bg-sidebar">
       <div className="flex h-16 items-center px-6">
         <Link href="/dashboard" className="flex items-center gap-2">
           <Image
-            src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/buildify-assets/Logo/logo.svg`}
+            src={logoUrl}
             alt="Buildify"
             width={32}
             height={32}

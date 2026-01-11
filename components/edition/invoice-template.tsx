@@ -432,7 +432,14 @@ export function InvoiceTemplate({
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Acompte versé</span>
-            <span>-{formatPrice(data.deposit)} €</span>
+            <span>
+              -
+              <EditableField
+                value={formatPrice(data.deposit)}
+                onSave={(v) => handleUpdate("deposit", parseFloat(v) || 0)}
+                suffix=" €"
+              />
+            </span>
           </div>
           <div className="flex justify-between font-bold border-t border-border pt-1">
             <span>Total TTC</span>

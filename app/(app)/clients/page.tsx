@@ -33,6 +33,7 @@ import {
   Phone,
   Loader2,
   Trash2,
+  AlertTriangle,
 } from "lucide-react";
 import {
   getClients,
@@ -62,6 +63,7 @@ export default function ClientsPage() {
     phone: "",
     type: "particulier" as ClientType,
   });
+  const [addErrorMessage, setAddErrorMessage] = useState<string | null>(null);
 
   const [editFormData, setEditFormData] = useState({
     first_name: "",
@@ -142,7 +144,9 @@ export default function ClientsPage() {
         resetForm();
         setIsAddModalOpen(false);
       } else {
-        console.error("Error adding client:", result.error);
+        setAddErrorMessage(
+          result.error || "Erreur lors de la création du client",
+        );
       }
     });
   };
@@ -192,6 +196,7 @@ export default function ClientsPage() {
       phone: "",
       type: "particulier",
     });
+    setAddErrorMessage(null);
   };
 
   if (isLoading) {
@@ -295,6 +300,12 @@ export default function ClientsPage() {
                 Remplissez les informations du nouveau client.
               </DialogDescription>
             </DialogHeader>
+            {addErrorMessage && (
+              <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-600 dark:text-amber-400">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <span className="text-sm">{addErrorMessage}</span>
+              </div>
+            )}
             <div className="grid gap-4 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { X, Loader2 } from "lucide-react";
+import { X, Loader2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,6 +29,7 @@ export function NewClientModal({
   onClientCreated,
 }: NewClientModalProps) {
   const [isPending, startTransition] = useTransition();
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     first_name: "",
     last_name: "",
@@ -45,6 +46,7 @@ export function NewClientModal({
       phone: "",
       type: "particulier",
     });
+    setErrorMessage(null);
   };
 
   const handleSubmit = () => {
@@ -62,7 +64,7 @@ export function NewClientModal({
         resetForm();
         onClose();
       } else {
-        console.error("Error adding client:", result.error);
+        setErrorMessage(result.error || "Erreur lors de la création du client");
       }
     });
   };
@@ -90,6 +92,13 @@ export function NewClientModal({
         </div>
 
         <div className="p-4 space-y-4">
+          {errorMessage && (
+            <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-600 dark:text-amber-400">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span className="text-sm">{errorMessage}</span>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="new_last_name" className="text-sm">

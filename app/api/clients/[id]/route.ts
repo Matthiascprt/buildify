@@ -6,6 +6,31 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const supabase = await createClient();
+
+    // Vérification de l'authentification
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+    }
+
+    // Récupérer la company de l'utilisateur
+    const { data: company } = await supabase
+      .from("companies")
+      .select("id")
+      .eq("user_id", user.id)
+      .single();
+
+    if (!company) {
+      return NextResponse.json(
+        { error: "Aucune entreprise associée" },
+        { status: 403 },
+      );
+    }
+
     const { id } = await params;
     const clientId = parseInt(id, 10);
 
@@ -16,12 +41,12 @@ export async function GET(
       );
     }
 
-    const supabase = await createClient();
-
+    // Vérifier que le client appartient à la company de l'utilisateur
     const { data: client, error } = await supabase
       .from("clients")
       .select("*")
       .eq("id", clientId)
+      .eq("company_id", company.id)
       .single();
 
     if (error) {

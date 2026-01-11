@@ -39,7 +39,12 @@ ${clients.map((c) => `- ID ${c.id}: ${c.first_name || ""} ${c.last_name || ""} (
         if (item.isSection) {
           return `  [Section ${index}] "${item.designation}" (sous-total: ${item.sectionTotal || 0}€)`;
         }
-        return `  [Ligne ${index}] "${item.designation}" - Qté: ${item.quantity || "N/A"}, PU: ${item.unitPrice || 0}€, TVA: ${item.tva || defaultTvaRate}%, Total: ${item.total || 0}€`;
+        const isEmpty =
+          (!item.designation || item.designation === "") &&
+          (item.unitPrice === 0 || !item.unitPrice) &&
+          (item.total === 0 || !item.total);
+        const emptyTag = isEmpty ? " ⚠️ LIGNE VIDE - RÉUTILISABLE" : "";
+        return `  [Ligne ${index}] "${item.designation || "(vide)"}" - Qté: ${item.quantity || "N/A"}, PU: ${item.unitPrice || 0}€, TVA: ${item.tva || defaultTvaRate}%, Total: ${item.total || 0}€${emptyTag}`;
       })
       .join("\n");
   };
@@ -51,11 +56,19 @@ ${clients.map((c) => `- ID ${c.id}: ${c.first_name || ""} ${c.last_name || ""} (
         ? `\n✓ Un acompte de ${currentDocument.deposit}€ existe. Tu peux l'ajuster si nécessaire.`
         : "";
 
+  const projectTitleWarning =
+    currentDocument &&
+    (!currentDocument.projectTitle ||
+      currentDocument.projectTitle === "Non défini" ||
+      currentDocument.projectTitle === "")
+      ? " ⚠️ TITRE VIDE - DOIT ÊTRE DÉFINI AUTOMATIQUEMENT"
+      : "";
+
   const documentState = currentDocument
     ? `
 ## Document en cours
 - Type: ${currentDocument.type === "quote" ? "Devis" : "Facture"} n°${currentDocument.number}
-- Titre du projet: ${currentDocument.projectTitle || "Non défini"}
+- Titre du projet: ${currentDocument.projectTitle || "Non défini"}${projectTitleWarning}
 - Client: ${currentDocument.client.name || "Non défini"} (ID: ${currentDocument.client.id || "non lié"})
 - Taux TVA global: ${currentDocument.tvaRate}%
 - Acompte: ${currentDocument.deposit}€ ${currentDocument.deposit === 0 ? "(AUCUN ACOMPTE)" : ""}
@@ -103,6 +116,20 @@ Tu dois être PROACTIF et AGIR SANS DEMANDER DE CONFIRMATION quand l'intention e
 - Si l'utilisateur dit "change la TVA à 10%" → CHANGE LA TVA IMMÉDIATEMENT
 - Si l'utilisateur dit "mets la quantité de la ligne 2 à 5" → MODIFIE IMMÉDIATEMENT
 - NE JAMAIS répondre "Voulez-vous que je..." ou "Souhaitez-vous que je..." - FAIS-LE DIRECTEMENT
+
+## RÈGLE CRITIQUE - TITRE DU PROJET AUTOMATIQUE
+Tu dois TOUJOURS définir le titre du projet (objet) automatiquement si :
+1. Le titre actuel est vide, "Non défini", ou trop générique
+2. Tu peux inférer le sujet du document à partir de la demande de l'utilisateur
+
+Exemples :
+- "devis pour rénovation cuisine pour M. Dupont" → utilise set_project_title avec "Rénovation cuisine"
+- "ajoute peinture murs salon" → si titre vide, utilise set_project_title avec "Peinture salon"
+- "facture travaux salle de bain" → utilise set_project_title avec "Travaux salle de bain"
+- "carrelage et plomberie pour la rénovation de l'appartement" → utilise set_project_title avec "Rénovation appartement"
+
+Le titre doit être COURT (2-4 mots), DESCRIPTIF du projet, et en majuscule au début.
+Utilise l'outil set_project_title EN MÊME TEMPS que tu ajoutes les lignes (appels parallèles).
 
 ## RÈGLE CRITIQUE - RESPECTER LES VALEURS EXACTES DEMANDÉES
 Quand l'utilisateur demande une valeur PRÉCISE, tu DOIS l'appliquer EXACTEMENT, sans arrondi ni modification :
@@ -246,6 +273,22 @@ TRÈS IMPORTANT : Avant CHAQUE modification, analyse l'état actuel du document 
 - PAS de récapitulatif automatique - seulement si l'utilisateur demande
 - ZÉRO confirmation inutile - agis IMMÉDIATEMENT sur les demandes claires
 - Pour trouver une ligne par son nom, utilise l'outil "find_and_update_line" ou cherche dans la liste ci-dessus
+
+## RÈGLE CRITIQUE - RÉUTILISER LES LIGNES VIDES
+Avant d'ajouter une nouvelle ligne avec "add_line_item", VÉRIFIE s'il existe des lignes vides dans le document.
+Une ligne est considérée VIDE si elle a :
+- designation = "" ou vide
+- unitPrice = 0
+- total = 0
+
+Si une ligne vide existe, utilise "update_line_item" avec l'index de cette ligne au lieu de "add_line_item".
+Cela évite de créer des lignes inutiles.
+
+Exemple : Si la ligne [Ligne 0] a designation="" et unitPrice=0, et que l'utilisateur dit "ajoute peinture 25€" :
+→ Utilise update_line_item(lineIndex=0, designation="Peinture", ...) au lieu de add_line_item
+
+## Outil pour le titre du projet - AUTOMATIQUE
+- **set_project_title** : Définit le titre/objet du document. UTILISE CET OUTIL AUTOMATIQUEMENT quand tu ajoutes des lignes et que le titre est vide ou "Non défini". Infère le titre à partir du contexte (ex: "rénovation salle de bain", "peinture appartement").
 
 ## Outils pour les totaux - TRÈS IMPORTANT
 - **adjust_total_ttc** : PRIORITAIRE - Pour définir le Total TTC exact. Par défaut, ajuste les prix HT proportionnellement. UTILISE CET OUTIL quand l'utilisateur dit "mets le total TTC à X€"

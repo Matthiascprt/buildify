@@ -15,6 +15,7 @@ import {
   findOrCreateClient,
   createQuoteWithContent,
   createInvoiceWithContent,
+  getCurrentUser,
 } from "@/lib/supabase/api";
 import { parseUserIntent } from "@/lib/ai/intent-parser";
 
@@ -49,6 +50,12 @@ export async function POST(
   req: NextRequest,
 ): Promise<NextResponse<ChatResponse | { error: string }>> {
   try {
+    // Vérification de l'authentification
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+    }
+
     const body: ChatRequestBody = await req.json();
     const {
       messages,
