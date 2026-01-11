@@ -191,3 +191,50 @@ function parseDateString(dateStr: string): string {
   // Return as-is if already in ISO format
   return dateStr;
 }
+
+interface LinkClientRequest {
+  documentId: number;
+  type: "quote" | "invoice";
+  clientId: number;
+}
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const body: LinkClientRequest = await req.json();
+    const { documentId, type, clientId } = body;
+
+    if (type === "quote") {
+      const result = await updateQuote(documentId, {
+        client_id: clientId,
+      });
+
+      if (!result.success) {
+        return NextResponse.json({ error: result.error }, { status: 400 });
+      }
+
+      return NextResponse.json({
+        success: true,
+        document: result.quote,
+      });
+    } else {
+      const result = await updateInvoice(documentId, {
+        client_id: clientId,
+      });
+
+      if (!result.success) {
+        return NextResponse.json({ error: result.error }, { status: 400 });
+      }
+
+      return NextResponse.json({
+        success: true,
+        document: result.invoice,
+      });
+    }
+  } catch (error) {
+    console.error("Error linking client to document:", error);
+    return NextResponse.json(
+      { error: "Une erreur est survenue lors de la liaison du client" },
+      { status: 500 },
+    );
+  }
+}

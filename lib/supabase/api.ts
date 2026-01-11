@@ -300,6 +300,33 @@ export async function getQuote(quoteId: number): Promise<Quote | null> {
   return data;
 }
 
+export type QuoteWithFullClient = Quote & {
+  clients: Client | null;
+};
+
+export async function getQuoteWithClient(
+  quoteId: number,
+): Promise<QuoteWithFullClient | null> {
+  const supabase = await createClient();
+  const company = await getCompany();
+
+  if (!company) return null;
+
+  const { data, error } = await supabase
+    .from("quotes")
+    .select("*, clients(*)")
+    .eq("id", quoteId)
+    .eq("company_id", company.id)
+    .single();
+
+  if (error) {
+    console.error("Error fetching quote with client:", error);
+    return null;
+  }
+
+  return data as QuoteWithFullClient;
+}
+
 export async function createQuote(
   quoteData: Omit<QuoteInsert, "company_id">,
 ): Promise<{ success: boolean; error?: string; quote?: Quote }> {
@@ -443,6 +470,33 @@ export async function getInvoice(invoiceId: number): Promise<Invoice | null> {
   }
 
   return data;
+}
+
+export type InvoiceWithFullClient = Invoice & {
+  clients: Client | null;
+};
+
+export async function getInvoiceWithClient(
+  invoiceId: number,
+): Promise<InvoiceWithFullClient | null> {
+  const supabase = await createClient();
+  const company = await getCompany();
+
+  if (!company) return null;
+
+  const { data, error } = await supabase
+    .from("invoices")
+    .select("*, clients(*)")
+    .eq("id", invoiceId)
+    .eq("company_id", company.id)
+    .single();
+
+  if (error) {
+    console.error("Error fetching invoice with client:", error);
+    return null;
+  }
+
+  return data as InvoiceWithFullClient;
 }
 
 export async function createInvoice(

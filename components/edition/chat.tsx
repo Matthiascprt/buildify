@@ -179,11 +179,28 @@ export function Chat({
   };
 
   const handleClientSelect = async (client: Client) => {
-    if (!document) return;
+    if (!document || !document.id) return;
 
     const clientName = [client.first_name, client.last_name]
       .filter(Boolean)
       .join(" ");
+
+    // Update client_id in database
+    try {
+      await fetch("/api/documents", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          documentId: document.id,
+          type: document.type,
+          clientId: client.id,
+        }),
+      });
+    } catch (error) {
+      console.error("Error linking client to document:", error);
+    }
 
     // Update document with client info
     const updatedDocument: DocumentData = {
@@ -200,8 +217,22 @@ export function Chat({
 
     onDocumentChange(updatedDocument);
 
-    // Send message as if user typed the client name
-    await sendMessage(`Le client est ${clientName}`, updatedDocument);
+    // Add local messages without calling API
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: "user",
+      content: `Le client est ${clientName}`,
+    };
+
+    const documentType =
+      document.type === "quote" ? "ce devis" : "cette facture";
+    const assistantMessage: Message = {
+      id: (Date.now() + 1).toString(),
+      role: "assistant",
+      content: `Parfait ! Que souhaitez-vous ajouter à ${documentType} ?`,
+    };
+
+    setMessages((prev) => [...prev, userMessage, assistantMessage]);
   };
 
   const handleQuickAction = async (type: "quote" | "invoice") => {
@@ -264,14 +295,32 @@ export function Chat({
       console.error("Error creating document:", error);
     }
 
-    setIsLoading(false);
     onDocumentChange(newDocument);
 
-    const content =
+    // Add user message
+    const userContent =
       type === "quote"
         ? "Je souhaite créer un devis"
         : "Je souhaite créer une facture";
-    await sendMessage(content, newDocument);
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: "user",
+      content: userContent,
+    };
+
+    // Add assistant response asking about client
+    const assistantMessage: Message = {
+      id: (Date.now() + 1).toString(),
+      role: "assistant",
+      content:
+        type === "quote"
+          ? "Très bien ! Quel client souhaitez-vous lier à ce devis ? Sélectionnez-le ci-dessous ou dites-le moi."
+          : "Très bien ! Quel client souhaitez-vous lier à cette facture ? Sélectionnez-le ci-dessous ou dites-le moi.",
+    };
+
+    setMessages((prev) => [...prev, userMessage, assistantMessage]);
+    setIsLoading(false);
   };
 
   return (
@@ -372,16 +421,18 @@ export function Chat({
                 {shouldShowClientButton &&
                   message.role === "assistant" &&
                   message.id !== "1" && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="rounded-full gap-2"
-                      onClick={() => setShowClientPicker(true)}
-                      disabled={isLoading}
-                    >
-                      <UserPlus className="h-4 w-4" />
-                      Lier un client
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="rounded-full gap-2"
+                        onClick={() => setShowClientPicker(true)}
+                        disabled={isLoading}
+                      >
+                        <UserPlus className="h-4 w-4" />
+                        Lier un client
+                      </Button>
+                    </div>
                   )}
               </div>
             </div>

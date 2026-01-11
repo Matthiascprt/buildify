@@ -499,11 +499,19 @@ export function executeToolCall(
       const tva = (args.tva as number) || currentDocument.tvaRate;
       const total = calculateLineTotal(quantity, unitPrice);
 
+      // Format quantity: don't show "forfait" or "u", add space for others
+      const hiddenUnits = ["forfait", "u", "unité", "unités"];
+      const formattedQuantity = hiddenUnits.includes(unit.toLowerCase())
+        ? `${quantity}`
+        : unit
+          ? `${quantity} ${unit}`
+          : `${quantity}`;
+
       const newItem: LineItem = {
         id: generateLineId(currentDocument.items),
         designation: args.designation as string,
         description: args.description as string | undefined,
-        quantity: `${quantity}${unit}`,
+        quantity: formattedQuantity,
         unitPrice,
         tva,
         total,
@@ -562,12 +570,20 @@ export function executeToolCall(
       const unit =
         args.unit !== undefined
           ? (args.unit as string)
-          : existingItem.quantity?.replace(/[\d.]/g, "") || "";
+          : existingItem.quantity?.replace(/[\d.\s]/g, "").trim() || "";
       const unitPrice =
         args.unitPrice !== undefined
           ? (args.unitPrice as number)
           : existingItem.unitPrice || 0;
       const total = calculateLineTotal(quantity, unitPrice);
+
+      // Format quantity: don't show "forfait" or "u", add space for others
+      const hiddenUnits = ["forfait", "u", "unité", "unités"];
+      const formattedQuantity = hiddenUnits.includes(unit.toLowerCase())
+        ? `${quantity}`
+        : unit
+          ? `${quantity} ${unit}`
+          : `${quantity}`;
 
       const updatedItem: LineItem = {
         ...existingItem,
@@ -576,7 +592,7 @@ export function executeToolCall(
           args.description !== undefined
             ? (args.description as string)
             : existingItem.description,
-        quantity: `${quantity}${unit}`,
+        quantity: formattedQuantity,
         unitPrice,
         tva: args.tva !== undefined ? (args.tva as number) : existingItem.tva,
         total,

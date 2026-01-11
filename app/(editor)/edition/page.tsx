@@ -4,8 +4,8 @@ import {
   getClients,
   getNextQuoteNumber,
   getNextInvoiceNumber,
-  getQuote,
-  getInvoice,
+  getQuoteWithClient,
+  getInvoiceWithClient,
 } from "@/lib/supabase/api";
 import { EditionClient } from "./edition-client";
 import type {
@@ -38,25 +38,57 @@ export default async function EditionPage({ searchParams }: EditionPageProps) {
 
     if (!isNaN(documentId)) {
       if (params.type === "quote") {
-        const quote = await getQuote(documentId);
+        const quote = await getQuoteWithClient(documentId);
         if (quote && quote.content) {
           const content = quote.content as unknown as QuoteData;
+          // Use client data from DB relation if available
+          const clientFromDb = quote.clients;
+          const clientData = clientFromDb
+            ? {
+                id: clientFromDb.id,
+                name: [clientFromDb.first_name, clientFromDb.last_name]
+                  .filter(Boolean)
+                  .join(" "),
+                address: "",
+                city: "",
+                phone: clientFromDb.phone || "",
+                email: clientFromDb.email || "",
+              }
+            : content.client;
+
           initialDocument = {
             ...content,
             type: "quote",
             id: quote.id,
             number: quote.quote_number || content.number || "",
+            client: clientData,
           };
         }
       } else if (params.type === "invoice") {
-        const invoice = await getInvoice(documentId);
+        const invoice = await getInvoiceWithClient(documentId);
         if (invoice && invoice.content) {
           const content = invoice.content as unknown as InvoiceData;
+          // Use client data from DB relation if available
+          const clientFromDb = invoice.clients;
+          const clientData = clientFromDb
+            ? {
+                id: clientFromDb.id,
+                name: [clientFromDb.first_name, clientFromDb.last_name]
+                  .filter(Boolean)
+                  .join(" "),
+                address: "",
+                city: "",
+                phone: clientFromDb.phone || "",
+                email: clientFromDb.email || "",
+              }
+            : content.client;
+
           initialDocument = {
             ...content,
             type: "invoice",
             id: invoice.id,
             number: invoice.invoice_number || content.number || "",
+            client: clientData,
           };
         }
       }

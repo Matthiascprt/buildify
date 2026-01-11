@@ -231,7 +231,7 @@ export function InvoiceTemplate({
                 TVA
               </th>
               <th className="px-3 py-2 font-semibold text-muted-foreground text-right">
-                Total TTC
+                Total HT
               </th>
             </tr>
           </thead>

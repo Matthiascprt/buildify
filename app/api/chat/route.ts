@@ -132,9 +132,25 @@ export async function POST(
           const clientResult = await handleClientAssociation(
             workingDocument,
             functionArgs,
+            clients,
           );
-          if (clientResult.clientId && workingDocument.client) {
-            workingDocument.client.id = clientResult.clientId;
+          // Update document with full client info from DB
+          if (clientResult.client && workingDocument.client) {
+            const clientName = [
+              clientResult.client.first_name,
+              clientResult.client.last_name,
+            ]
+              .filter(Boolean)
+              .join(" ");
+            workingDocument.client = {
+              id: clientResult.client.id,
+              name: clientName,
+              address: workingDocument.client.address || "",
+              city: workingDocument.client.city || "",
+              phone: clientResult.client.phone || "",
+              email: clientResult.client.email || "",
+              siret: workingDocument.client.siret || "",
+            };
           }
         }
 
@@ -197,10 +213,22 @@ async function saveDocumentToDatabase(document: DocumentData): Promise<void> {
 async function handleClientAssociation(
   document: DocumentData,
   clientArgs: Record<string, unknown>,
-): Promise<{ clientId?: number }> {
-  // If clientId is already provided, use it directly
+  clients: Client[],
+): Promise<{ client?: Client }> {
+  // If clientId is already provided, find the client in the list
   if (clientArgs.clientId) {
-    return { clientId: clientArgs.clientId as number };
+    const existingClient = clients.find((c) => c.id === clientArgs.clientId);
+    if (existingClient) {
+      // Update document in database with client association
+      if (document.id) {
+        if (document.type === "quote") {
+          await updateQuote(document.id, { client_id: existingClient.id });
+        } else {
+          await updateInvoice(document.id, { client_id: existingClient.id });
+        }
+      }
+      return { client: existingClient };
+    }
   }
 
   // Extract client info from args
@@ -220,6 +248,34 @@ async function handleClientAssociation(
 
   const email = clientArgs.email as string | undefined;
   const phone = clientArgs.phone as string | undefined;
+
+  // First, check if we can find the client by name in the existing clients list
+  if (name) {
+    const normalizedName = name.toLowerCase().trim();
+    const existingClient = clients.find((c) => {
+      const clientFullName = [c.first_name, c.last_name]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return (
+        clientFullName === normalizedName ||
+        clientFullName.includes(normalizedName) ||
+        normalizedName.includes(clientFullName)
+      );
+    });
+
+    if (existingClient) {
+      // Update document in database with client association
+      if (document.id) {
+        if (document.type === "quote") {
+          await updateQuote(document.id, { client_id: existingClient.id });
+        } else {
+          await updateInvoice(document.id, { client_id: existingClient.id });
+        }
+      }
+      return { client: existingClient };
+    }
+  }
 
   // Only search/create if we have identifying information
   if (!firstName && !lastName && !email && !phone) {
@@ -243,7 +299,7 @@ async function handleClientAssociation(
           await updateInvoice(document.id, { client_id: result.client.id });
         }
       }
-      return { clientId: result.client.id };
+      return { client: result.client };
     }
   } catch (error) {
     console.error("Error handling client association:", error);
