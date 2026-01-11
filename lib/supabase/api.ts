@@ -219,6 +219,31 @@ export async function deleteClient(
     return { success: false, error: "Aucune entreprise associée" };
   }
 
+  // First, dissociate all quotes from this client (set client_id to NULL)
+  const { error: quotesError } = await supabase
+    .from("quotes")
+    .update({ client_id: null })
+    .eq("client_id", clientId)
+    .eq("company_id", company.id);
+
+  if (quotesError) {
+    console.error("Error dissociating quotes from client:", quotesError);
+    return { success: false, error: quotesError.message };
+  }
+
+  // Then, dissociate all invoices from this client (set client_id to NULL)
+  const { error: invoicesError } = await supabase
+    .from("invoices")
+    .update({ client_id: null })
+    .eq("client_id", clientId)
+    .eq("company_id", company.id);
+
+  if (invoicesError) {
+    console.error("Error dissociating invoices from client:", invoicesError);
+    return { success: false, error: invoicesError.message };
+  }
+
+  // Finally, delete the client
   const { error } = await supabase
     .from("clients")
     .delete()
@@ -585,11 +610,11 @@ export async function getNextQuoteNumber(): Promise<string> {
 
   if (!company) {
     const year = new Date().getFullYear();
-    return `DEV-${year}-0001`;
+    return `${year}-0001`;
   }
 
   const year = new Date().getFullYear();
-  const prefix = `DEV-${year}-`;
+  const prefix = `${year}-`;
 
   const { data, error } = await supabase
     .from("quotes")
@@ -621,11 +646,11 @@ export async function getNextInvoiceNumber(): Promise<string> {
 
   if (!company) {
     const year = new Date().getFullYear();
-    return `FAC-${year}-0001`;
+    return `${year}-0001`;
   }
 
   const year = new Date().getFullYear();
-  const prefix = `FAC-${year}-`;
+  const prefix = `${year}-`;
 
   const { data, error } = await supabase
     .from("invoices")
@@ -860,7 +885,6 @@ export async function createQuoteWithContent(
       valid_until: validUntilDate,
       content,
       payment_terms: null,
-      pdf_url: null,
     })
     .select()
     .single();
@@ -902,7 +926,6 @@ export async function createInvoiceWithContent(
       due_date: dueDateValue,
       content,
       payment_terms: null,
-      pdf_url: null,
     })
     .select()
     .single();
@@ -913,6 +936,235 @@ export async function createInvoiceWithContent(
   }
 
   return { success: true, invoice: data };
+}
+
+// ============ SMART CLIENT SYNC ============
+
+export interface DocumentClientInfo {
+  name?: string;
+  phone?: string;
+  email?: string;
+}
+
+export interface SyncClientResult {
+  success: boolean;
+  error?: string;
+  client?: Client;
+  action: "none" | "associated" | "created" | "updated";
+  message?: string;
+}
+
+/**
+ * Synchronise intelligemment le client du document :
+ * - Si le nom change et correspond à un client existant → associe ce client
+ * - Si le nom change et ne correspond à aucun client → crée un nouveau client
+ * - Si téléphone/email change (sans changer le nom) → met à jour le client existant
+ */
+export async function syncClientFromDocument(
+  documentType: "quote" | "invoice",
+  documentId: number,
+  currentClientId: number | undefined | null,
+  clientInfo: DocumentClientInfo,
+  previousClientName?: string,
+): Promise<SyncClientResult> {
+  const supabase = await createClient();
+  const company = await getCompany();
+
+  if (!company) {
+    return {
+      success: false,
+      error: "Aucune entreprise associée",
+      action: "none",
+    };
+  }
+
+  const clientName = clientInfo.name?.trim() || "";
+  const clientPhone = clientInfo.phone?.trim() || "";
+  const clientEmail = clientInfo.email?.trim() || "";
+
+  // Si pas de nom, rien à faire
+  if (!clientName) {
+    return { success: true, action: "none", message: "Pas de nom de client" };
+  }
+
+  // Parse le nom en prénom/nom
+  const nameParts = clientName.split(" ");
+  const firstName =
+    nameParts.length > 1 ? nameParts.slice(0, -1).join(" ") : "";
+  const lastName =
+    nameParts.length > 1 ? nameParts[nameParts.length - 1] : clientName;
+
+  // Vérifier si le nom a changé
+  const nameChanged =
+    previousClientName &&
+    previousClientName.trim().toLowerCase() !== clientName.toLowerCase();
+
+  if (nameChanged || !currentClientId) {
+    // Le nom a changé ou pas de client associé → chercher un client existant par nom
+    const { data: existingClients } = await supabase
+      .from("clients")
+      .select("*")
+      .eq("company_id", company.id)
+      .or(
+        firstName
+          ? `and(first_name.ilike.%${firstName}%,last_name.ilike.%${lastName}%),last_name.ilike.%${clientName}%`
+          : `last_name.ilike.%${clientName}%,first_name.ilike.%${clientName}%`,
+      )
+      .limit(5);
+
+    // Chercher une correspondance exacte
+    const exactMatch = existingClients?.find((c) => {
+      const fullName = [c.first_name, c.last_name]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return fullName === clientName.toLowerCase();
+    });
+
+    if (exactMatch) {
+      // Client trouvé → l'associer au document
+      // NE PAS mettre à jour le client avec les anciennes infos du document
+      // On retourne les infos du client tel quel pour remplir le document
+
+      // Associer le client au document
+      if (documentType === "quote") {
+        await supabase
+          .from("quotes")
+          .update({ client_id: exactMatch.id })
+          .eq("id", documentId)
+          .eq("company_id", company.id);
+      } else {
+        await supabase
+          .from("invoices")
+          .update({ client_id: exactMatch.id })
+          .eq("id", documentId)
+          .eq("company_id", company.id);
+      }
+
+      return {
+        success: true,
+        client: exactMatch,
+        action: "associated",
+        message: `Client "${clientName}" associé au document`,
+      };
+    }
+
+    // Pas de client trouvé → créer un nouveau client SANS les anciennes infos
+    // Le téléphone et email seront vides, l'utilisateur les remplira
+    const newClientData: ClientInsert = {
+      company_id: company.id,
+      type: "particulier",
+      first_name: firstName || null,
+      last_name: lastName,
+      phone: null,
+      email: null,
+    };
+
+    const { data: newClient, error: createError } = await supabase
+      .from("clients")
+      .insert(newClientData)
+      .select()
+      .single();
+
+    if (createError) {
+      return { success: false, error: createError.message, action: "none" };
+    }
+
+    // Associer le nouveau client au document
+    if (documentType === "quote") {
+      await supabase
+        .from("quotes")
+        .update({ client_id: newClient.id })
+        .eq("id", documentId)
+        .eq("company_id", company.id);
+    } else {
+      await supabase
+        .from("invoices")
+        .update({ client_id: newClient.id })
+        .eq("id", documentId)
+        .eq("company_id", company.id);
+    }
+
+    return {
+      success: true,
+      client: newClient,
+      action: "created",
+      message: `Nouveau client "${clientName}" créé et associé`,
+    };
+  }
+
+  // Le nom n'a pas changé et on a un client associé → mettre à jour ses infos
+  if (currentClientId) {
+    const updates: ClientUpdate = {};
+
+    // Récupérer le client actuel
+    const { data: currentClient } = await supabase
+      .from("clients")
+      .select("*")
+      .eq("id", currentClientId)
+      .single();
+
+    if (currentClient) {
+      if (clientPhone && clientPhone !== currentClient.phone) {
+        updates.phone = clientPhone;
+      }
+      if (clientEmail && clientEmail !== currentClient.email) {
+        updates.email = clientEmail;
+      }
+
+      if (Object.keys(updates).length > 0) {
+        const { data: updatedClient, error: updateError } = await supabase
+          .from("clients")
+          .update(updates)
+          .eq("id", currentClientId)
+          .select()
+          .single();
+
+        if (updateError) {
+          return { success: false, error: updateError.message, action: "none" };
+        }
+
+        return {
+          success: true,
+          client: updatedClient,
+          action: "updated",
+          message: `Informations du client mises à jour`,
+        };
+      }
+    }
+  }
+
+  return {
+    success: true,
+    action: "none",
+    message: "Aucune modification nécessaire",
+  };
+}
+
+/**
+ * Recherche des clients par nom (pour l'autocomplétion)
+ */
+export async function searchClientsByName(
+  searchTerm: string,
+): Promise<Client[]> {
+  const supabase = await createClient();
+  const company = await getCompany();
+
+  if (!company || !searchTerm.trim()) return [];
+
+  const { data, error } = await supabase
+    .from("clients")
+    .select("*")
+    .eq("company_id", company.id)
+    .or(`first_name.ilike.%${searchTerm}%,last_name.ilike.%${searchTerm}%`)
+    .limit(5);
+
+  if (error) {
+    console.error("Error searching clients:", error);
+    return [];
+  }
+
+  return data ?? [];
 }
 
 // ============ DASHBOARD ============

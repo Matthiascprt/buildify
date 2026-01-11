@@ -196,13 +196,13 @@ function DocumentRow({ document, onClick }: DocumentRowProps) {
       className="flex items-center gap-4 p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors cursor-pointer"
       onClick={onClick}
     >
-      <div className="shrink-0 w-12 h-14 rounded border-2 flex flex-col items-center justify-center border-orange-200 bg-orange-50 dark:border-orange-900 dark:bg-orange-950">
-        <div className="w-6 h-0.5 rounded-full mb-1 bg-orange-300 dark:bg-orange-700" />
-        <div className="w-4 h-0.5 rounded-full mb-1.5 bg-orange-200 dark:bg-orange-800" />
+      <div className="shrink-0 w-12 h-14 rounded border-2 flex flex-col items-center justify-center border-orange-200 bg-orange-50 dark:border-orange-500/40 dark:bg-orange-500/10">
+        <div className="w-6 h-0.5 rounded-full mb-1 bg-orange-300 dark:bg-orange-400" />
+        <div className="w-4 h-0.5 rounded-full mb-1.5 bg-orange-200 dark:bg-orange-500/50" />
         <div className="space-y-0.5">
-          <div className="w-5 h-0.5 rounded-full bg-orange-200 dark:bg-orange-800" />
-          <div className="w-5 h-0.5 rounded-full bg-orange-200 dark:bg-orange-800" />
-          <div className="w-3 h-0.5 rounded-full bg-orange-200 dark:bg-orange-800" />
+          <div className="w-5 h-0.5 rounded-full bg-orange-200 dark:bg-orange-500/50" />
+          <div className="w-5 h-0.5 rounded-full bg-orange-200 dark:bg-orange-500/50" />
+          <div className="w-3 h-0.5 rounded-full bg-orange-200 dark:bg-orange-500/50" />
         </div>
         <span className="text-[6px] font-bold mt-1 text-orange-500 dark:text-orange-400">
           {isDevis ? "DEV" : "FAC"}
@@ -210,7 +210,16 @@ function DocumentRow({ document, onClick }: DocumentRowProps) {
       </div>
 
       <div className="flex-1 min-w-0 space-y-1">
-        <p className="font-semibold text-sm truncate">{document.numero}</p>
+        <div className="flex items-center gap-2">
+          <span
+            className={`inline-flex items-center justify-center w-2 h-2 rounded-full ${
+              isDevis ? "bg-orange-500" : "bg-amber-500"
+            }`}
+          />
+          <p className="font-semibold text-sm truncate">
+            {isDevis ? "Devis" : "Facture"} N° {document.numero}
+          </p>
+        </div>
         <p className="text-xs text-muted-foreground">
           {formatDate(document.dateCreation)}
         </p>

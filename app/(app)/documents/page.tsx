@@ -33,7 +33,9 @@ export default async function DocumentsPage() {
 
       return {
         id: quote.id,
-        numero: quote.quote_number || `DEV-${quote.id}`,
+        numero:
+          quote.quote_number ||
+          `${new Date().getFullYear()}-${String(quote.id).padStart(4, "0")}`,
         type: "devis" as DocumentType,
         clientNom: clientName,
         dateCreation: new Date(quote.created_at),
@@ -51,7 +53,9 @@ export default async function DocumentsPage() {
 
       return {
         id: invoice.id,
-        numero: invoice.invoice_number || `FAC-${invoice.id}`,
+        numero:
+          invoice.invoice_number ||
+          `${new Date().getFullYear()}-${String(invoice.id).padStart(4, "0")}`,
         type: "facture" as DocumentType,
         clientNom: clientName,
         dateCreation: new Date(invoice.created_at),

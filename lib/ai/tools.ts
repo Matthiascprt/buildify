@@ -133,7 +133,8 @@ export const documentTools: ChatCompletionTool[] = [
           },
           description: {
             type: "string",
-            description: "Description détaillée (optionnel)",
+            description:
+              "Description détaillée OBLIGATOIRE - Tu dois TOUJOURS générer une description professionnelle et pertinente basée sur la désignation. Exemple: pour 'Pose carrelage', mettre 'Fourniture et pose de carrelage grès cérame, colle et joints compris'. NE JAMAIS laisser vide.",
           },
           quantity: {
             type: "number",
@@ -145,14 +146,16 @@ export const documentTools: ChatCompletionTool[] = [
           },
           unitPrice: {
             type: "number",
-            description: "Prix unitaire HT en euros",
+            description:
+              "Prix unitaire HT (Hors Taxes) en euros pour UNE unité. Le total HT de la ligne sera calculé: Quantité × Prix unitaire HT",
           },
           tva: {
             type: "number",
-            description: "Taux de TVA en pourcentage (par défaut 20)",
+            description:
+              "Taux de TVA en pourcentage (ex: 10, 20). Par défaut utilise le taux de l'entreprise. La TVA sera calculée sur le total HT de la ligne.",
           },
         },
-        required: ["designation", "quantity", "unitPrice"],
+        required: ["designation", "description", "quantity", "unitPrice"],
       },
     },
   },
@@ -175,23 +178,24 @@ export const documentTools: ChatCompletionTool[] = [
           },
           description: {
             type: "string",
-            description: "Nouvelle description",
+            description: "Nouvelle description détaillée de la prestation",
           },
           quantity: {
             type: "number",
-            description: "Nouvelle quantité",
+            description: "Nouvelle quantité (nombre uniquement, sans unité)",
           },
           unit: {
             type: "string",
-            description: "Nouvelle unité",
+            description: "Nouvelle unité de mesure (m², ml, h, u, forfait)",
           },
           unitPrice: {
             type: "number",
-            description: "Nouveau prix unitaire HT",
+            description:
+              "Nouveau prix unitaire HT en euros. Le total HT sera recalculé: Quantité × Prix unitaire HT",
           },
           tva: {
             type: "number",
-            description: "Nouveau taux de TVA",
+            description: "Nouveau taux de TVA en pourcentage (ex: 10, 20)",
           },
         },
         required: ["lineIndex"],
@@ -236,13 +240,14 @@ export const documentTools: ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "set_deposit",
-      description: "Définit le montant de l'acompte déjà versé.",
+      description:
+        "Définit le montant de l'acompte. L'acompte sera déduit du Total TTC final. Formule: Total TTC = Total HT + TVA - Acompte",
       parameters: {
         type: "object",
         properties: {
           amount: {
             type: "number",
-            description: "Montant de l'acompte en euros",
+            description: "Montant de l'acompte en euros à déduire du total TTC",
           },
         },
         required: ["amount"],
@@ -253,13 +258,15 @@ export const documentTools: ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "set_tva_rate",
-      description: "Définit le taux de TVA global du document.",
+      description:
+        "Définit le taux de TVA global et l'applique à TOUTES les lignes du document. Utiliser pour changer la TVA de tout le document d'un coup.",
       parameters: {
         type: "object",
         properties: {
           rate: {
             type: "number",
-            description: "Taux de TVA en pourcentage (ex: 10, 20)",
+            description:
+              "Taux de TVA en pourcentage (5.5, 10, ou 20). Sera appliqué à toutes les lignes.",
           },
         },
         required: ["rate"],
@@ -312,6 +319,145 @@ export const documentTools: ChatCompletionTool[] = [
         type: "object",
         properties: {},
         required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "find_and_update_line",
+      description:
+        "Trouve une ligne par son nom (désignation) et la met à jour. Utiliser quand l'utilisateur mentionne une ligne par son nom plutôt que par son numéro.",
+      parameters: {
+        type: "object",
+        properties: {
+          searchTerm: {
+            type: "string",
+            description:
+              "Terme de recherche pour trouver la ligne (ex: 'peinture', 'carrelage', 'main d'oeuvre')",
+          },
+          designation: {
+            type: "string",
+            description: "Nouvelle désignation (optionnel)",
+          },
+          description: {
+            type: "string",
+            description:
+              "Nouvelle description détaillée de la prestation (optionnel)",
+          },
+          quantity: {
+            type: "number",
+            description: "Nouvelle quantité en nombre (optionnel)",
+          },
+          unit: {
+            type: "string",
+            description:
+              "Nouvelle unité de mesure: m², ml, h, u, forfait (optionnel)",
+          },
+          unitPrice: {
+            type: "number",
+            description:
+              "Nouveau prix unitaire HT en euros. Le total HT sera recalculé (optionnel)",
+          },
+          tva: {
+            type: "number",
+            description:
+              "Nouveau taux de TVA en pourcentage: 5.5, 10, 20 (optionnel)",
+          },
+        },
+        required: ["searchTerm"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "recalculate_totals",
+      description:
+        "Recalcule tous les totaux du document (HT, TVA, TTC). Utiliser si l'utilisateur demande de 'refaire le total' ou si les calculs semblent incorrects.",
+      parameters: {
+        type: "object",
+        properties: {},
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "set_accent_color",
+      description:
+        "Change la couleur d'accent du document (couleur de l'en-tête du tableau). Utiliser quand l'utilisateur demande de changer la couleur du document, de le personnaliser avec une couleur, ou de modifier le style visuel.",
+      parameters: {
+        type: "object",
+        properties: {
+          color: {
+            type: "string",
+            description:
+              "Couleur au format hexadécimal (ex: '#3b82f6' pour bleu, '#10b981' pour vert, '#ef4444' pour rouge, '#f59e0b' pour orange). Utilise null ou 'default' pour réinitialiser à la couleur par défaut grise.",
+          },
+        },
+        required: ["color"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "set_total_ttc",
+      description:
+        "OBSOLÈTE - Utilise 'adjust_total_ttc' à la place. Cette fonction ajuste l'acompte pour atteindre le TTC, mais peut créer des incohérences.",
+      parameters: {
+        type: "object",
+        properties: {
+          amount: {
+            type: "number",
+            description: "Le montant TTC final exact souhaité en euros",
+          },
+        },
+        required: ["amount"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "adjust_total_ttc",
+      description:
+        "PRIORITAIRE - Ajuste le Total TTC de manière intelligente. Par défaut, ajuste les prix HT proportionnellement (méthode recommandée). Utilise cette fonction quand l'utilisateur demande un TTC précis. IMPORTANT: si l'acompte est actuellement à 0, utilise TOUJOURS method='adjust_ht'.",
+      parameters: {
+        type: "object",
+        properties: {
+          amount: {
+            type: "number",
+            description: "Le montant TTC final exact souhaité en euros",
+          },
+          method: {
+            type: "string",
+            enum: ["adjust_ht", "adjust_deposit"],
+            description:
+              "Méthode d'ajustement: 'adjust_ht' (RECOMMANDÉ, par défaut) ajuste tous les prix HT proportionnellement pour atteindre le TTC. 'adjust_deposit' modifie l'acompte (À UTILISER SEULEMENT si un acompte existe déjà). Si l'acompte actuel est 0, utilise OBLIGATOIREMENT 'adjust_ht'.",
+          },
+        },
+        required: ["amount"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "set_total_ht",
+      description:
+        "PRIORITAIRE - Définit le Total HT exact demandé par l'utilisateur. Ajuste proportionnellement tous les prix unitaires pour atteindre le HT désiré. Si l'utilisateur dit 'je veux un total HT de 1000€', utilise cet outil.",
+      parameters: {
+        type: "object",
+        properties: {
+          amount: {
+            type: "number",
+            description: "Le montant HT total exact souhaité en euros",
+          },
+        },
+        required: ["amount"],
       },
     },
   },
@@ -391,7 +537,11 @@ export function executeToolCall(
   args: Record<string, unknown>,
   currentDocument: DocumentData | null,
   context: ToolContext,
-): { document: DocumentData | null; result: string } {
+): {
+  document: DocumentData | null;
+  result: string;
+  accentColor?: string | null;
+} {
   const companyInfo = {
     name: context.company.name || "",
     address: context.company.address || "",
@@ -407,15 +557,24 @@ export function executeToolCall(
       const docType = args.documentType as "quote" | "invoice";
       const projectTitle = (args.projectTitle as string) || "";
 
+      const defaultTvaRate = context.company.vat_rate || 20;
       if (docType === "quote") {
-        const doc = createEmptyQuote(companyInfo, context.nextQuoteNumber);
+        const doc = createEmptyQuote(
+          companyInfo,
+          context.nextQuoteNumber,
+          defaultTvaRate,
+        );
         doc.projectTitle = projectTitle;
         return {
           document: doc,
           result: `Devis n°${doc.number} créé avec succès.`,
         };
       } else {
-        const doc = createEmptyInvoice(companyInfo, context.nextInvoiceNumber);
+        const doc = createEmptyInvoice(
+          companyInfo,
+          context.nextInvoiceNumber,
+          defaultTvaRate,
+        );
         doc.projectTitle = projectTitle;
         return {
           document: doc,
@@ -686,14 +845,24 @@ export function executeToolCall(
         };
       }
       const rate = args.rate as number;
+      const updatedItems = currentDocument.items.map((item) => {
+        if (item.isSection) return item;
+        return { ...item, tva: rate };
+      });
+      const recalculatedItems = recalculateSectionTotals(updatedItems);
       const totals = calculateTotals(
-        currentDocument.items,
+        recalculatedItems,
         rate,
         currentDocument.deposit,
       );
       return {
-        document: { ...currentDocument, tvaRate: rate, ...totals },
-        result: `Taux de TVA défini: ${rate}%`,
+        document: {
+          ...currentDocument,
+          items: recalculatedItems,
+          tvaRate: rate,
+          ...totals,
+        },
+        result: `Taux de TVA défini: ${rate}% (appliqué à toutes les lignes)`,
       };
     }
 
@@ -740,6 +909,323 @@ export function executeToolCall(
       return {
         document: invoice,
         result: `Devis converti en facture n°${invoice.number}`,
+      };
+    }
+
+    case "find_and_update_line": {
+      if (!currentDocument) {
+        return {
+          document: null,
+          result: "Erreur: Aucun document en cours.",
+        };
+      }
+      const searchTerm = (args.searchTerm as string).toLowerCase();
+      const foundIndex = currentDocument.items.findIndex(
+        (item) =>
+          !item.isSection &&
+          item.designation.toLowerCase().includes(searchTerm),
+      );
+
+      if (foundIndex === -1) {
+        return {
+          document: currentDocument,
+          result: `Erreur: Aucune ligne trouvée contenant "${args.searchTerm}". Lignes disponibles: ${currentDocument.items
+            .filter((i) => !i.isSection)
+            .map((i) => i.designation)
+            .join(", ")}`,
+        };
+      }
+
+      const existingItem = currentDocument.items[foundIndex];
+      const quantity =
+        args.quantity !== undefined
+          ? (args.quantity as number)
+          : parseFloat(existingItem.quantity?.replace(/[^\d.]/g, "") || "0");
+      const unit =
+        args.unit !== undefined
+          ? (args.unit as string)
+          : existingItem.quantity?.replace(/[\d.\s]/g, "").trim() || "";
+      const unitPrice =
+        args.unitPrice !== undefined
+          ? (args.unitPrice as number)
+          : existingItem.unitPrice || 0;
+      const total = calculateLineTotal(quantity, unitPrice);
+
+      const hiddenUnits = ["forfait", "u", "unité", "unités"];
+      const formattedQuantity = hiddenUnits.includes(unit.toLowerCase())
+        ? `${quantity}`
+        : unit
+          ? `${quantity} ${unit}`
+          : `${quantity}`;
+
+      const updatedItem: LineItem = {
+        ...existingItem,
+        designation: (args.designation as string) || existingItem.designation,
+        description:
+          args.description !== undefined
+            ? (args.description as string)
+            : existingItem.description,
+        quantity: formattedQuantity,
+        unitPrice,
+        tva: args.tva !== undefined ? (args.tva as number) : existingItem.tva,
+        total,
+      };
+
+      const newItems = [...currentDocument.items];
+      newItems[foundIndex] = updatedItem;
+      const recalculatedItems = recalculateSectionTotals(newItems);
+      const totals = calculateTotals(
+        recalculatedItems,
+        currentDocument.tvaRate,
+        currentDocument.deposit,
+      );
+
+      return {
+        document: { ...currentDocument, items: recalculatedItems, ...totals },
+        result: `Ligne "${existingItem.designation}" mise à jour: ${total}€`,
+      };
+    }
+
+    case "recalculate_totals": {
+      if (!currentDocument) {
+        return {
+          document: null,
+          result: "Erreur: Aucun document en cours.",
+        };
+      }
+      const recalculatedItems = recalculateSectionTotals(currentDocument.items);
+      const totals = calculateTotals(
+        recalculatedItems,
+        currentDocument.tvaRate,
+        currentDocument.deposit,
+      );
+      return {
+        document: { ...currentDocument, items: recalculatedItems, ...totals },
+        result: `Totaux recalculés: HT ${totals.totalHT}€, TVA ${totals.tvaAmount}€, TTC ${totals.totalTTC}€`,
+      };
+    }
+
+    case "set_total_ttc": {
+      if (!currentDocument) {
+        return {
+          document: null,
+          result: "Erreur: Aucun document en cours.",
+        };
+      }
+      const desiredTTC = args.amount as number;
+
+      // Si l'acompte est 0, on ajuste le HT au lieu de créer un acompte
+      if (currentDocument.deposit === 0) {
+        // Calculer le HT nécessaire pour atteindre le TTC désiré
+        // TTC = HT + (HT * TVA%) donc HT = TTC / (1 + TVA%)
+        const avgTvaRate = currentDocument.tvaRate / 100;
+        const targetHT =
+          Math.round((desiredTTC / (1 + avgTvaRate)) * 100) / 100;
+        const currentHT = currentDocument.totalHT;
+
+        if (currentHT === 0) {
+          return {
+            document: currentDocument,
+            result:
+              "Erreur: Impossible d'ajuster le TTC car il n'y a aucune ligne.",
+          };
+        }
+
+        const ratio = targetHT / currentHT;
+
+        const updatedItems = currentDocument.items.map((item) => {
+          if (item.isSection) return item;
+          const newUnitPrice =
+            Math.round((item.unitPrice || 0) * ratio * 100) / 100;
+          const quantity = parseFloat(
+            item.quantity?.replace(/[^\d.]/g, "") || "0",
+          );
+          const newTotal = calculateLineTotal(quantity, newUnitPrice);
+          return { ...item, unitPrice: newUnitPrice, total: newTotal };
+        });
+
+        const recalculatedItems = recalculateSectionTotals(updatedItems);
+        const totals = calculateTotals(
+          recalculatedItems,
+          currentDocument.tvaRate,
+          0,
+        );
+
+        return {
+          document: { ...currentDocument, items: recalculatedItems, ...totals },
+          result: `Total TTC ajusté à ${totals.totalTTC}€ (prix HT mis à l'échelle)`,
+        };
+      }
+
+      // Si un acompte existe, on peut l'ajuster
+      const currentHT = currentDocument.totalHT;
+      const currentTVA = currentDocument.tvaAmount;
+      const newDeposit =
+        Math.round((currentHT + currentTVA - desiredTTC) * 100) / 100;
+
+      return {
+        document: {
+          ...currentDocument,
+          deposit: newDeposit,
+          totalTTC: desiredTTC,
+        },
+        result: `Total TTC défini à ${desiredTTC}€ (acompte ajusté à ${newDeposit}€)`,
+      };
+    }
+
+    case "adjust_total_ttc": {
+      if (!currentDocument) {
+        return {
+          document: null,
+          result: "Erreur: Aucun document en cours.",
+        };
+      }
+      const desiredTTC = args.amount as number;
+      const method = (args.method as string) || "adjust_ht";
+
+      // Force adjust_ht si l'acompte est 0
+      const effectiveMethod =
+        currentDocument.deposit === 0 ? "adjust_ht" : method;
+
+      if (effectiveMethod === "adjust_ht") {
+        // Calculer le HT nécessaire pour atteindre le TTC désiré
+        // On doit trouver HT tel que HT + TVA(HT) = TTC
+        // Comme chaque ligne peut avoir un taux différent, on calcule un ratio global
+        const currentHT = currentDocument.totalHT;
+        const currentTVA = currentDocument.tvaAmount;
+
+        if (currentHT === 0) {
+          return {
+            document: currentDocument,
+            result:
+              "Erreur: Impossible d'ajuster le TTC car il n'y a aucune ligne.",
+          };
+        }
+
+        // Ratio pour atteindre le nouveau TTC (en gardant l'acompte actuel)
+        const targetHTplusTVA = desiredTTC + currentDocument.deposit;
+        const currentHTplusTVA = currentHT + currentTVA;
+        const ratio = targetHTplusTVA / currentHTplusTVA;
+
+        const updatedItems = currentDocument.items.map((item) => {
+          if (item.isSection) return item;
+          const newUnitPrice =
+            Math.round((item.unitPrice || 0) * ratio * 100) / 100;
+          const quantity = parseFloat(
+            item.quantity?.replace(/[^\d.]/g, "") || "0",
+          );
+          const newTotal = calculateLineTotal(quantity, newUnitPrice);
+          return { ...item, unitPrice: newUnitPrice, total: newTotal };
+        });
+
+        const recalculatedItems = recalculateSectionTotals(updatedItems);
+        const totals = calculateTotals(
+          recalculatedItems,
+          currentDocument.tvaRate,
+          currentDocument.deposit,
+        );
+
+        return {
+          document: { ...currentDocument, items: recalculatedItems, ...totals },
+          result: `Total TTC ajusté à ${totals.totalTTC}€ (prix HT mis à l'échelle, acompte inchangé: ${currentDocument.deposit}€)`,
+        };
+      } else {
+        // adjust_deposit: ajuster l'acompte
+        const currentHT = currentDocument.totalHT;
+        const currentTVA = currentDocument.tvaAmount;
+        const newDeposit =
+          Math.round((currentHT + currentTVA - desiredTTC) * 100) / 100;
+
+        if (newDeposit < 0) {
+          return {
+            document: currentDocument,
+            result: `Erreur: Impossible d'atteindre ${desiredTTC}€ TTC avec un acompte. Le maximum possible est ${Math.round((currentHT + currentTVA) * 100) / 100}€. Utilisez adjust_ht pour ajuster les prix.`,
+          };
+        }
+
+        return {
+          document: {
+            ...currentDocument,
+            deposit: newDeposit,
+            totalTTC: desiredTTC,
+          },
+          result: `Total TTC défini à ${desiredTTC}€ (acompte ajusté à ${newDeposit}€)`,
+        };
+      }
+    }
+
+    case "set_total_ht": {
+      if (!currentDocument) {
+        return {
+          document: null,
+          result: "Erreur: Aucun document en cours.",
+        };
+      }
+      const desiredHT = args.amount as number;
+      const currentHT = currentDocument.totalHT;
+
+      if (currentHT === 0) {
+        return {
+          document: currentDocument,
+          result:
+            "Erreur: Impossible d'ajuster le HT car il n'y a aucune ligne avec un montant.",
+        };
+      }
+
+      // Calculer le ratio pour ajuster tous les prix
+      const ratio = desiredHT / currentHT;
+
+      // Ajuster tous les prix unitaires proportionnellement
+      const updatedItems = currentDocument.items.map((item) => {
+        if (item.isSection) return item;
+        const newUnitPrice =
+          Math.round((item.unitPrice || 0) * ratio * 100) / 100;
+        const quantity = parseFloat(
+          item.quantity?.replace(/[^\d.]/g, "") || "0",
+        );
+        const newTotal = calculateLineTotal(quantity, newUnitPrice);
+        return { ...item, unitPrice: newUnitPrice, total: newTotal };
+      });
+
+      const recalculatedItems = recalculateSectionTotals(updatedItems);
+      const totals = calculateTotals(
+        recalculatedItems,
+        currentDocument.tvaRate,
+        currentDocument.deposit,
+      );
+
+      return {
+        document: { ...currentDocument, items: recalculatedItems, ...totals },
+        result: `Total HT ajusté à ${totals.totalHT}€ (prix unitaires mis à l'échelle)`,
+      };
+    }
+
+    case "set_accent_color": {
+      const color = args.color as string;
+      const isReset =
+        !color || color === "default" || color === "null" || color === "reset";
+
+      if (isReset) {
+        return {
+          document: currentDocument,
+          result: "Couleur réinitialisée à la valeur par défaut.",
+          accentColor: null,
+        };
+      }
+
+      // Validate hex color format
+      const hexPattern = /^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{3})$/;
+      if (!hexPattern.test(color)) {
+        return {
+          document: currentDocument,
+          result: `Erreur: Format de couleur invalide. Utilisez un format hexadécimal comme '#3b82f6'.`,
+        };
+      }
+
+      return {
+        document: currentDocument,
+        result: `Couleur d'accent changée en ${color}.`,
+        accentColor: color,
       };
     }
 

@@ -6,13 +6,17 @@ import type {
 } from "openai/resources/chat/completions";
 import { documentTools, executeToolCall } from "@/lib/ai/tools";
 import { buildSystemPrompt } from "@/lib/ai/system-prompt";
-import type { DocumentData } from "@/lib/types/document";
+import type { DocumentData, DocumentCompany } from "@/lib/types/document";
+import { createEmptyQuote, createEmptyInvoice } from "@/lib/types/document";
 import type { Company, Client } from "@/lib/supabase/types";
 import {
   updateQuote,
   updateInvoice,
   findOrCreateClient,
+  createQuoteWithContent,
+  createInvoiceWithContent,
 } from "@/lib/supabase/api";
+import { parseUserIntent } from "@/lib/ai/intent-parser";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -25,11 +29,18 @@ interface ChatRequestBody {
   clients: Client[];
   nextQuoteNumber: string;
   nextInvoiceNumber: string;
+  isFirstMessage?: boolean;
+}
+
+interface AutoCreationResult {
+  document: DocumentData | null;
+  actions: string[];
 }
 
 interface ChatResponse {
   message: string;
   document: DocumentData | null;
+  accentColor?: string | null;
 }
 
 const MAX_TOOL_ITERATIONS = 10;
@@ -46,12 +57,35 @@ export async function POST(
       clients,
       nextQuoteNumber,
       nextInvoiceNumber,
+      isFirstMessage,
     } = body;
+
+    let workingDocument = currentDocument;
+    const accentColorState: { value: string | null | undefined } = {
+      value: undefined,
+    };
+    const autoActions: string[] = [];
+
+    if (isFirstMessage && !currentDocument && messages.length > 0) {
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage.role === "user") {
+        const result = await handleAutoCreation(
+          lastMessage.content,
+          clients,
+          company,
+          nextQuoteNumber,
+          nextInvoiceNumber,
+        );
+        workingDocument = result.document;
+        autoActions.push(...result.actions);
+      }
+    }
 
     const systemPrompt = buildSystemPrompt({
       company,
       clients,
-      currentDocument,
+      currentDocument: workingDocument,
+      autoActions,
     });
 
     const toolContext = {
@@ -72,7 +106,6 @@ export async function POST(
       nextInvoiceNumber,
     };
 
-    let workingDocument = currentDocument;
     const openaiMessages: ChatCompletionMessageParam[] = [
       { role: "system", content: systemPrompt },
       ...messages.map((msg) => ({
@@ -102,12 +135,16 @@ export async function POST(
       ) {
         // Save document to database before returning
         if (workingDocument?.id) {
-          await saveDocumentToDatabase(workingDocument);
+          await saveDocumentToDatabase(workingDocument, accentColorState.value);
         }
-        return NextResponse.json({
+        const response: ChatResponse = {
           message: assistantMessage.content || "",
           document: workingDocument,
-        });
+        };
+        if (accentColorState.value !== undefined) {
+          response.accentColor = accentColorState.value;
+        }
+        return NextResponse.json(response);
       }
 
       const toolResults: ChatCompletionToolMessageParam[] = [];
@@ -118,7 +155,11 @@ export async function POST(
         const functionName = toolCall.function.name;
         const functionArgs = JSON.parse(toolCall.function.arguments);
 
-        const { document: updatedDocument, result } = executeToolCall(
+        const {
+          document: updatedDocument,
+          result,
+          accentColor,
+        } = executeToolCall(
           functionName,
           functionArgs,
           workingDocument,
@@ -126,6 +167,11 @@ export async function POST(
         );
 
         workingDocument = updatedDocument;
+
+        // Track accent color changes
+        if (accentColor !== undefined) {
+          accentColorState.value = accentColor;
+        }
 
         // Handle client creation when set_client is called
         if (functionName === "set_client" && workingDocument?.id) {
@@ -166,13 +212,17 @@ export async function POST(
 
     // Save document to database before returning
     if (workingDocument?.id) {
-      await saveDocumentToDatabase(workingDocument);
+      await saveDocumentToDatabase(workingDocument, accentColorState.value);
     }
 
-    return NextResponse.json({
+    const response: ChatResponse = {
       message: "J'ai effectué les modifications demandées.",
       document: workingDocument,
-    });
+    };
+    if (accentColorState.value !== undefined) {
+      response.accentColor = accentColorState.value;
+    }
+    return NextResponse.json(response);
   } catch (error) {
     console.error("OpenAI API error:", error);
     return NextResponse.json(
@@ -183,7 +233,10 @@ export async function POST(
 }
 
 // Helper function to save document to database
-async function saveDocumentToDatabase(document: DocumentData): Promise<void> {
+async function saveDocumentToDatabase(
+  document: DocumentData,
+  color?: string | null,
+): Promise<void> {
   if (!document.id) return;
 
   try {
@@ -195,6 +248,7 @@ async function saveDocumentToDatabase(document: DocumentData): Promise<void> {
         valid_until: parseValidityToDate(document.validity),
         payment_terms: document.paymentConditions || null,
         client_id: document.client?.id,
+        ...(color !== undefined && { color }),
       });
     } else {
       await updateInvoice(document.id, {
@@ -202,6 +256,7 @@ async function saveDocumentToDatabase(document: DocumentData): Promise<void> {
         due_date: parseDateString(document.dueDate),
         payment_terms: document.paymentConditions || null,
         client_id: document.client?.id,
+        ...(color !== undefined && { color }),
       });
     }
   } catch (error) {
@@ -344,4 +399,102 @@ function parseDateString(dateStr: string): string {
   }
 
   return dateStr;
+}
+
+async function handleAutoCreation(
+  message: string,
+  clients: Client[],
+  company: Company | null,
+  nextQuoteNumber: string,
+  nextInvoiceNumber: string,
+): Promise<AutoCreationResult> {
+  const intent = parseUserIntent(message, clients);
+  const actions: string[] = [];
+  let document: DocumentData | null = null;
+
+  if (!intent.hasDocumentType) {
+    return { document: null, actions: [] };
+  }
+
+  const companyInfo: DocumentCompany = {
+    name: company?.name || "",
+    address: company?.address || "",
+    city: "",
+    phone: company?.phone || "",
+    email: company?.email || "",
+    siret: company?.siret || "",
+    logoUrl: company?.logo_url || undefined,
+  };
+
+  const defaultTvaRate = company?.vat_rate ?? 20;
+
+  if (intent.documentType === "quote") {
+    document = createEmptyQuote(companyInfo, nextQuoteNumber, defaultTvaRate);
+    actions.push(`Devis n°${nextQuoteNumber} créé`);
+  } else {
+    document = createEmptyInvoice(
+      companyInfo,
+      nextInvoiceNumber,
+      defaultTvaRate,
+    );
+    actions.push(`Facture n°${nextInvoiceNumber} créée`);
+  }
+
+  if (intent.projectTitle) {
+    document.projectTitle = intent.projectTitle;
+    actions.push(`Titre du projet: "${intent.projectTitle}"`);
+  }
+
+  try {
+    if (intent.documentType === "quote") {
+      const result = await createQuoteWithContent(
+        nextQuoteNumber,
+        document as unknown as Record<string, unknown>,
+      );
+      if (result.success && result.quote) {
+        document.id = result.quote.id;
+      }
+    } else {
+      const result = await createInvoiceWithContent(
+        nextInvoiceNumber,
+        document as unknown as Record<string, unknown>,
+      );
+      if (result.success && result.invoice) {
+        document.id = result.invoice.id;
+      }
+    }
+  } catch (error) {
+    console.error("Error creating document in database:", error);
+  }
+
+  if (intent.clientMatch && document.id) {
+    const clientName = [
+      intent.clientMatch.first_name,
+      intent.clientMatch.last_name,
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    document.client = {
+      id: intent.clientMatch.id,
+      name: clientName,
+      address: "",
+      city: "",
+      phone: intent.clientMatch.phone || "",
+      email: intent.clientMatch.email || "",
+    };
+
+    try {
+      if (document.type === "quote") {
+        await updateQuote(document.id, { client_id: intent.clientMatch.id });
+      } else {
+        await updateInvoice(document.id, { client_id: intent.clientMatch.id });
+      }
+      actions.push(`Client lié: ${clientName}`);
+    } catch (error) {
+      console.error("Error linking client:", error);
+    }
+  }
+
+  return { document, actions };
 }

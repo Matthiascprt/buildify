@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Search, FileText, Receipt } from "lucide-react";
+import { Search, FileText } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -16,11 +16,15 @@ import { getDocumentsByClient, type ClientDocument } from "@/lib/supabase/api";
 
 interface ClientDocumentsProps {
   clientId: number;
+  onNavigate?: () => void;
 }
 
 type FilterType = "all" | "quote" | "invoice";
 
-export function ClientDocuments({ clientId }: ClientDocumentsProps) {
+export function ClientDocuments({
+  clientId,
+  onNavigate,
+}: ClientDocumentsProps) {
   const router = useRouter();
   const [documents, setDocuments] = useState<ClientDocument[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -74,11 +78,18 @@ export function ClientDocuments({ clientId }: ClientDocumentsProps) {
   };
 
   const handleDocumentClick = (doc: ClientDocument) => {
+    onNavigate?.();
     const path =
       doc.type === "quote"
         ? `/edition?type=quote&id=${doc.id}`
         : `/edition?type=invoice&id=${doc.id}`;
-    router.push(path);
+
+    // Use hard navigation to ensure full page reload when already on /edition
+    if (window.location.pathname === "/edition") {
+      window.location.assign(path);
+    } else {
+      router.push(path);
+    }
   };
 
   if (isLoading) {
@@ -140,18 +151,30 @@ export function ClientDocuments({ clientId }: ClientDocumentsProps) {
               onClick={() => handleDocumentClick(doc)}
               className="w-full flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors text-left"
             >
-              <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center shrink-0">
-                {doc.type === "quote" ? (
-                  <FileText className="h-5 w-5 text-muted-foreground" />
-                ) : (
-                  <Receipt className="h-5 w-5 text-muted-foreground" />
-                )}
+              <div className="shrink-0 w-10 h-12 rounded border-2 flex flex-col items-center justify-center border-orange-200 bg-orange-50 dark:border-orange-500/40 dark:bg-orange-500/10">
+                <div className="w-5 h-0.5 rounded-full mb-0.5 bg-orange-300 dark:bg-orange-400" />
+                <div className="w-3 h-0.5 rounded-full mb-1 bg-orange-200 dark:bg-orange-500/50" />
+                <div className="space-y-0.5">
+                  <div className="w-4 h-0.5 rounded-full bg-orange-200 dark:bg-orange-500/50" />
+                  <div className="w-4 h-0.5 rounded-full bg-orange-200 dark:bg-orange-500/50" />
+                </div>
+                <span className="text-[5px] font-bold mt-0.5 text-orange-500 dark:text-orange-400">
+                  {doc.type === "quote" ? "DEV" : "FAC"}
+                </span>
               </div>
               <div className="flex-1 min-w-0">
-                <span className="font-medium truncate block">
-                  {doc.number || "Sans numéro"}
-                </span>
-                <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`inline-flex items-center justify-center w-2 h-2 rounded-full ${
+                      doc.type === "quote" ? "bg-orange-500" : "bg-amber-500"
+                    }`}
+                  />
+                  <span className="font-medium truncate block">
+                    {doc.type === "quote" ? "Devis" : "Facture"} N°{" "}
+                    {doc.number || "Sans numéro"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5 ml-4">
                   <span>{formatDate(doc.date)}</span>
                   {doc.totalTTC !== undefined && (
                     <span className="font-medium">

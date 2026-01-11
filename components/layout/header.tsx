@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { Menu, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -46,7 +47,15 @@ export function Header({ user }: HeaderProps) {
         <SheetContent side="left" className="w-60 p-0 bg-sidebar">
           <div className="flex h-16 items-center px-6 border-b border-sidebar-border">
             <Link href="/dashboard" className="flex items-center gap-2">
-              <span className="text-xl font-bold tracking-tight text-sidebar-foreground">
+              <Image
+                src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/buildify-assets/Logo/logo.svg`}
+                alt="Buildify"
+                width={32}
+                height={32}
+                className="flex-shrink-0"
+                unoptimized
+              />
+              <span className="text-2xl font-bold tracking-tight text-sidebar-foreground">
                 Buildify
               </span>
             </Link>
@@ -59,7 +68,15 @@ export function Header({ user }: HeaderProps) {
         href="/dashboard"
         className="flex items-center gap-2 font-bold lg:hidden"
       >
-        <span className="text-xl">Buildify</span>
+        <Image
+          src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/buildify-assets/Logo/logo.svg`}
+          alt="Buildify"
+          width={32}
+          height={32}
+          className="flex-shrink-0"
+          unoptimized
+        />
+        <span className="text-2xl">Buildify</span>
       </Link>
 
       <div className="flex-1" />

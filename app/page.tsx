@@ -7,13 +7,13 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen flex flex-col">
       {/* Header */}
-      <header className="h-14 border-b flex items-center justify-between px-4 lg:px-6">
-        <Link href="/" className="flex items-center gap-2 font-bold text-xl">
+      <header className="h-14 border-b flex items-center justify-between px-4 lg:px-6 sticky top-0 bg-background z-50">
+        <Link href="/" className="flex items-center gap-2 font-bold text-2xl">
           <Image
             src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/buildify-assets/Logo/logo.svg`}
             alt="Buildify"
-            width={28}
-            height={28}
+            width={32}
+            height={32}
             className="flex-shrink-0"
             unoptimized
           />

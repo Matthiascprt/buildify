@@ -51,7 +51,7 @@ export type Quote = {
   valid_until: string | null;
   content: Record<string, unknown> | null;
   payment_terms: string | null;
-  pdf_url: string | null;
+  color: string | null;
 };
 
 export type Invoice = {
@@ -63,7 +63,7 @@ export type Invoice = {
   due_date: string | null;
   content: Record<string, unknown> | null;
   payment_terms: string | null;
-  pdf_url: string | null;
+  color: string | null;
 };
 
 export type QuoteInsert = Omit<Quote, "id" | "created_at">;

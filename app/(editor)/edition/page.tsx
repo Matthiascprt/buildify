@@ -32,6 +32,7 @@ export default async function EditionPage({ searchParams }: EditionPageProps) {
   const userInitial = profile?.last_name?.charAt(0).toUpperCase() || "U";
 
   let initialDocument: DocumentData | null = null;
+  let initialAccentColor: string | null = null;
 
   if (params.id && params.type) {
     const documentId = parseInt(params.id, 10);
@@ -63,6 +64,7 @@ export default async function EditionPage({ searchParams }: EditionPageProps) {
             number: quote.quote_number || content.number || "",
             client: clientData,
           };
+          initialAccentColor = quote.color || null;
         }
       } else if (params.type === "invoice") {
         const invoice = await getInvoiceWithClient(documentId);
@@ -90,6 +92,7 @@ export default async function EditionPage({ searchParams }: EditionPageProps) {
             number: invoice.invoice_number || content.number || "",
             client: clientData,
           };
+          initialAccentColor = invoice.color || null;
         }
       }
     }
@@ -103,6 +106,7 @@ export default async function EditionPage({ searchParams }: EditionPageProps) {
       initialNextQuoteNumber={nextQuoteNumber}
       initialNextInvoiceNumber={nextInvoiceNumber}
       initialDocument={initialDocument}
+      initialAccentColor={initialAccentColor}
     />
   );
 }

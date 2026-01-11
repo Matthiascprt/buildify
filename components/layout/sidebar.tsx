@@ -8,7 +8,6 @@ import {
   LayoutDashboard,
   FileText,
   Users,
-  Search,
   Sun,
   Moon,
   Settings,
@@ -18,7 +17,6 @@ import {
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
-import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -189,28 +187,18 @@ export function Sidebar({ user }: SidebarProps) {
           <Image
             src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/buildify-assets/Logo/logo.svg`}
             alt="Buildify"
-            width={28}
-            height={28}
+            width={32}
+            height={32}
             className="flex-shrink-0"
             unoptimized
           />
-          <span className="text-xl font-bold tracking-tight text-sidebar-foreground">
+          <span className="text-2xl font-bold tracking-tight text-sidebar-foreground">
             Buildify
           </span>
         </Link>
       </div>
 
-      <div className="px-4 pb-4">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-sidebar-foreground/50" />
-          <Input
-            placeholder="Rechercher..."
-            className="h-9 bg-sidebar-accent/50 border-0 pl-9 text-sm placeholder:text-sidebar-foreground/50 focus-visible:ring-1 focus-visible:ring-sidebar-ring"
-          />
-        </div>
-      </div>
-
-      <nav className="flex-1 space-y-6 px-4 overflow-y-auto">
+      <nav className="flex-1 space-y-6 px-4 pt-4 overflow-y-auto">
         {navGroups.map((group) => (
           <div key={group.label} className="space-y-1">
             <p className="px-3 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/50">
@@ -239,17 +227,7 @@ export function SidebarContent({ user }: SidebarProps) {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="px-4 py-4">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-sidebar-foreground/50" />
-          <Input
-            placeholder="Rechercher..."
-            className="h-9 bg-sidebar-accent/50 border-0 pl-9 text-sm placeholder:text-sidebar-foreground/50 focus-visible:ring-1 focus-visible:ring-sidebar-ring"
-          />
-        </div>
-      </div>
-
-      <nav className="flex-1 space-y-6 px-4 overflow-y-auto">
+      <nav className="flex-1 space-y-6 px-4 pt-4 overflow-y-auto">
         {navGroups.map((group) => (
           <div key={group.label} className="space-y-1">
             <p className="px-3 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/50">

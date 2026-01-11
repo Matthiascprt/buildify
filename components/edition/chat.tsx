@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Send, Mic, UserPlus } from "lucide-react";
+import { Send, Mic, UserPlus, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -10,6 +10,7 @@ import type { DocumentData, DocumentCompany } from "@/lib/types/document";
 import { createEmptyQuote, createEmptyInvoice } from "@/lib/types/document";
 import type { Company, Client } from "@/lib/supabase/types";
 import { ClientPickerModal } from "./client-picker-modal";
+import { NewClientModal } from "./new-client-modal";
 
 interface Message {
   id: string;
@@ -26,6 +27,7 @@ interface ChatProps {
   nextQuoteNumber: string;
   nextInvoiceNumber: string;
   isEditingExisting?: boolean;
+  onAccentColorChange?: (color: string | null) => void;
 }
 
 export function Chat({
@@ -37,6 +39,7 @@ export function Chat({
   nextQuoteNumber,
   nextInvoiceNumber,
   isEditingExisting: initialIsEditingExisting = false,
+  onAccentColorChange,
 }: ChatProps) {
   const [isEditingExisting, setIsEditingExisting] = useState(
     initialIsEditingExisting,
@@ -60,6 +63,7 @@ export function Chat({
     !initialIsEditingExisting,
   );
   const [showClientPicker, setShowClientPicker] = useState(false);
+  const [showNewClientModal, setShowNewClientModal] = useState(false);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -97,7 +101,12 @@ export function Chat({
   const sendMessage = async (
     content: string,
     overrideDocument?: DocumentData | null,
+    isFirstUserMessage?: boolean,
   ) => {
+    if (isFirstUserMessage) {
+      setShowQuickActions(false);
+    }
+
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
@@ -128,6 +137,7 @@ export function Chat({
           clients,
           nextQuoteNumber,
           nextInvoiceNumber,
+          isFirstMessage: isFirstUserMessage,
         }),
       });
 
@@ -143,6 +153,11 @@ export function Chat({
 
         if (data.document !== undefined) {
           onDocumentChange(data.document);
+        }
+
+        // Handle accent color change from AI
+        if (data.accentColor !== undefined && onAccentColorChange) {
+          onAccentColorChange(data.accentColor);
         }
       } else {
         const errorMessage: Message = {
@@ -168,7 +183,9 @@ export function Chat({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
-    await sendMessage(input.trim());
+    const isFirstUserMessage =
+      !document && messages.length === 1 && messages[0].role === "assistant";
+    await sendMessage(input.trim(), undefined, isFirstUserMessage);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -331,6 +348,11 @@ export function Chat({
         onClose={() => setShowClientPicker(false)}
         onSelect={handleClientSelect}
       />
+      <NewClientModal
+        isOpen={showNewClientModal}
+        onClose={() => setShowNewClientModal(false)}
+        onClientCreated={handleClientSelect}
+      />
       <div className="border-b px-4 py-3">
         <div className="flex items-center gap-3">
           <Avatar className="h-10 w-10">
@@ -431,6 +453,16 @@ export function Chat({
                       >
                         <UserPlus className="h-4 w-4" />
                         Lier un client
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="rounded-full gap-2"
+                        onClick={() => setShowNewClientModal(true)}
+                        disabled={isLoading}
+                      >
+                        <Plus className="h-4 w-4" />
+                        Nouveau client
                       </Button>
                     </div>
                   )}

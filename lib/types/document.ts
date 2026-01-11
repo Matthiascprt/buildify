@@ -137,15 +137,22 @@ export function createEmptyInvoice(
 
 export function calculateTotals(
   items: LineItem[],
-  tvaRate: number,
+  globalTvaRate: number,
   deposit: number = 0,
 ): { totalHT: number; tvaAmount: number; totalTTC: number } {
-  const totalHT = items.reduce((sum, item) => {
-    if (item.isSection) return sum;
-    return sum + (item.total || 0);
-  }, 0);
+  let totalHT = 0;
+  let tvaAmount = 0;
 
-  const tvaAmount = Math.round(totalHT * (tvaRate / 100) * 100) / 100;
+  for (const item of items) {
+    if (item.isSection) continue;
+    const lineTotal = item.total || 0;
+    const lineTvaRate = item.tva ?? globalTvaRate;
+    totalHT += lineTotal;
+    tvaAmount += Math.round(lineTotal * (lineTvaRate / 100) * 100) / 100;
+  }
+
+  totalHT = Math.round(totalHT * 100) / 100;
+  tvaAmount = Math.round(tvaAmount * 100) / 100;
   const totalTTC = Math.round((totalHT + tvaAmount - deposit) * 100) / 100;
 
   return { totalHT, tvaAmount, totalTTC };
