@@ -33,7 +33,6 @@ import {
   Phone,
   Loader2,
   Trash2,
-  FileText,
 } from "lucide-react";
 import {
   getClients,
@@ -42,6 +41,7 @@ import {
   deleteClient,
 } from "@/lib/supabase/api";
 import type { Client } from "@/lib/supabase/types";
+import { ClientDocuments } from "@/components/clients/client-documents";
 
 type ClientType = "particulier" | "professionnel";
 
@@ -556,14 +556,7 @@ export default function ClientsPage() {
               {/* Documents Section */}
               <div className="space-y-4">
                 <h3 className="font-semibold">Documents</h3>
-
-                {/* Placeholder for documents */}
-                <div className="flex flex-col items-center justify-center py-8 text-center border rounded-lg bg-muted/30">
-                  <FileText className="h-10 w-10 text-muted-foreground mb-3" />
-                  <p className="text-sm text-muted-foreground">
-                    Aucun devis ou facture pour ce client
-                  </p>
-                </div>
+                <ClientDocuments clientId={selectedClient.id} />
               </div>
 
               <Separator className="my-4" />

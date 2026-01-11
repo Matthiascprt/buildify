@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Chat } from "@/components/edition/chat";
 import { DocumentPreview } from "@/components/edition/document-preview";
+import { deleteQuote, deleteInvoice } from "@/lib/supabase/api";
 import type { DocumentData } from "@/lib/types/document";
 import type { Company, Client } from "@/lib/supabase/types";
 
@@ -58,6 +59,29 @@ export function EditionClient({
     }
   };
 
+  const handleDeleteDocument = async (): Promise<{
+    success: boolean;
+    error?: string;
+  }> => {
+    if (!document || !document.id) {
+      return { success: false, error: "Aucun document à supprimer" };
+    }
+
+    let result: { success: boolean; error?: string };
+
+    if (document.type === "quote") {
+      result = await deleteQuote(document.id);
+    } else {
+      result = await deleteInvoice(document.id);
+    }
+
+    if (result.success) {
+      setDocument(null);
+    }
+
+    return result;
+  };
+
   return (
     <div className="grid h-full grid-cols-1 lg:grid-cols-2 overflow-hidden">
       <div className="border-r h-full overflow-hidden">
@@ -73,7 +97,10 @@ export function EditionClient({
         />
       </div>
       <div className="hidden lg:block h-full overflow-hidden">
-        <DocumentPreview document={document} />
+        <DocumentPreview
+          document={document}
+          onDeleteDocument={handleDeleteDocument}
+        />
       </div>
     </div>
   );

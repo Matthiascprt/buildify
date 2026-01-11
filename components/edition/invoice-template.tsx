@@ -180,7 +180,9 @@ export function InvoiceTemplate({
 
         {/* Client */}
         <div>
-          <h2 className="font-bold text-lg mb-3">Client</h2>
+          <h2 className="font-bold text-lg mb-3">
+            {data.client.name || "Client"}
+          </h2>
           <div className="space-y-2 text-muted-foreground">
             <div className={showIcons ? "flex items-start gap-2" : ""}>
               {showIcons && <MapPin className="h-4 w-4 mt-0.5 shrink-0" />}

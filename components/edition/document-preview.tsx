@@ -5,6 +5,14 @@ import { FileText, Download, User, Trash2, Eye, EyeOff } from "lucide-react";
 import html2canvas from "html2canvas-pro";
 import { jsPDF } from "jspdf";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { QuoteTemplate } from "./quote-template";
 import { InvoiceTemplate } from "./invoice-template";
 import type {
@@ -15,6 +23,7 @@ import type {
 
 interface DocumentPreviewProps {
   document: DocumentData | null;
+  onDeleteDocument?: () => Promise<{ success: boolean; error?: string }>;
 }
 
 function mapToQuoteTemplateData(doc: QuoteData) {
@@ -81,9 +90,36 @@ function mapToInvoiceTemplateData(doc: InvoiceData) {
   };
 }
 
-export function DocumentPreview({ document }: DocumentPreviewProps) {
+export function DocumentPreview({
+  document,
+  onDeleteDocument,
+}: DocumentPreviewProps) {
   const [showIcons, setShowIcons] = useState(true);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showDeleteSuccess, setShowDeleteSuccess] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const documentRef = useRef<HTMLDivElement>(null);
+
+  const handleDeleteClick = () => {
+    setShowDeleteConfirm(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!onDeleteDocument) return;
+
+    setIsDeleting(true);
+    const result = await onDeleteDocument();
+    setIsDeleting(false);
+
+    if (result.success) {
+      setShowDeleteConfirm(false);
+      setShowDeleteSuccess(true);
+    }
+  };
+
+  const handleSuccessClose = () => {
+    setShowDeleteSuccess(false);
+  };
 
   const handleDownloadPDF = async () => {
     if (!documentRef.current || !document) return;
@@ -177,6 +213,7 @@ export function DocumentPreview({ document }: DocumentPreviewProps) {
                 variant="ghost"
                 size="icon"
                 className="h-9 w-9 rounded-full bg-muted hover:bg-muted/80"
+                onClick={handleDeleteClick}
               >
                 <Trash2 className="h-4 w-4 text-muted-foreground" />
               </Button>
@@ -222,6 +259,50 @@ export function DocumentPreview({ document }: DocumentPreviewProps) {
           </div>
         </div>
       </div>
+
+      {/* Dialog de confirmation de suppression */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Supprimer le document</DialogTitle>
+            <DialogDescription>
+              Souhaitez-vous vraiment supprimer ce document ? Cette action est
+              irréversible.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowDeleteConfirm(false)}
+              disabled={isDeleting}
+            >
+              Non
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmDelete}
+              disabled={isDeleting}
+            >
+              {isDeleting ? "Suppression..." : "Oui, supprimer"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de succès */}
+      <Dialog open={showDeleteSuccess} onOpenChange={setShowDeleteSuccess}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Document supprimé</DialogTitle>
+            <DialogDescription>
+              Ce document a bien été supprimé.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={handleSuccessClose}>OK</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

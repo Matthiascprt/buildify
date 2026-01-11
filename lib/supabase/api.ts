@@ -597,6 +597,93 @@ export async function getNextInvoiceNumber(): Promise<string> {
   return `${prefix}${nextSequence}`;
 }
 
+// ============ DOCUMENTS BY CLIENT ============
+
+export async function getQuotesByClient(clientId: number): Promise<Quote[]> {
+  const supabase = await createClient();
+  const company = await getCompany();
+
+  if (!company) return [];
+
+  const { data, error } = await supabase
+    .from("quotes")
+    .select("*")
+    .eq("company_id", company.id)
+    .eq("client_id", clientId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching quotes by client:", error);
+    return [];
+  }
+
+  return data ?? [];
+}
+
+export async function getInvoicesByClient(
+  clientId: number,
+): Promise<Invoice[]> {
+  const supabase = await createClient();
+  const company = await getCompany();
+
+  if (!company) return [];
+
+  const { data, error } = await supabase
+    .from("invoices")
+    .select("*")
+    .eq("company_id", company.id)
+    .eq("client_id", clientId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching invoices by client:", error);
+    return [];
+  }
+
+  return data ?? [];
+}
+
+export type ClientDocument = {
+  id: number;
+  type: "quote" | "invoice";
+  number: string | null;
+  date: string;
+  totalTTC?: number;
+};
+
+export async function getDocumentsByClient(
+  clientId: number,
+): Promise<ClientDocument[]> {
+  const [quotes, invoices] = await Promise.all([
+    getQuotesByClient(clientId),
+    getInvoicesByClient(clientId),
+  ]);
+
+  const documents: ClientDocument[] = [
+    ...quotes.map((q) => ({
+      id: q.id,
+      type: "quote" as const,
+      number: q.quote_number,
+      date: q.created_at,
+      totalTTC: (q.content as { totalTTC?: number } | null)?.totalTTC,
+    })),
+    ...invoices.map((i) => ({
+      id: i.id,
+      type: "invoice" as const,
+      number: i.invoice_number,
+      date: i.created_at,
+      totalTTC: (i.content as { totalTTC?: number } | null)?.totalTTC,
+    })),
+  ];
+
+  // Sort by date descending
+  documents.sort(
+    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+  );
+
+  return documents;
+}
+
 // ============ CLIENT SEARCH/CREATE ============
 
 export interface ClientSearchParams {
@@ -772,4 +859,173 @@ export async function createInvoiceWithContent(
   }
 
   return { success: true, invoice: data };
+}
+
+// ============ DASHBOARD ============
+
+export interface DashboardStats {
+  totalRevenue: number;
+  totalClients: number;
+  totalDocuments: number;
+}
+
+export async function getDashboardStats(): Promise<DashboardStats> {
+  const supabase = await createClient();
+  const company = await getCompany();
+
+  if (!company) {
+    return { totalRevenue: 0, totalClients: 0, totalDocuments: 0 };
+  }
+
+  // Get current month boundaries
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const endOfMonth = new Date(
+    now.getFullYear(),
+    now.getMonth() + 1,
+    0,
+    23,
+    59,
+    59,
+  );
+
+  // Get invoices for current month to calculate revenue
+  const { data: invoices } = await supabase
+    .from("invoices")
+    .select("content")
+    .eq("company_id", company.id)
+    .gte("created_at", startOfMonth.toISOString())
+    .lte("created_at", endOfMonth.toISOString());
+
+  // Calculate total revenue from invoices
+  const totalRevenue =
+    invoices?.reduce((sum, invoice) => {
+      const content = invoice.content as { totalTTC?: number } | null;
+      return sum + (content?.totalTTC || 0);
+    }, 0) || 0;
+
+  // Get total clients
+  const { count: clientsCount } = await supabase
+    .from("clients")
+    .select("*", { count: "exact", head: true })
+    .eq("company_id", company.id);
+
+  // Get total quotes
+  const { count: quotesCount } = await supabase
+    .from("quotes")
+    .select("*", { count: "exact", head: true })
+    .eq("company_id", company.id);
+
+  // Get total invoices
+  const { count: invoicesCount } = await supabase
+    .from("invoices")
+    .select("*", { count: "exact", head: true })
+    .eq("company_id", company.id);
+
+  return {
+    totalRevenue,
+    totalClients: clientsCount || 0,
+    totalDocuments: (quotesCount || 0) + (invoicesCount || 0),
+  };
+}
+
+export interface RecentActivity {
+  id: number;
+  type: "quote" | "invoice";
+  number: string | null;
+  clientName: string | null;
+  totalTTC: number;
+  createdAt: string;
+}
+
+export async function getTodayActivity(): Promise<RecentActivity[]> {
+  const supabase = await createClient();
+  const company = await getCompany();
+
+  if (!company) return [];
+
+  // Get today's boundaries
+  const now = new Date();
+  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const endOfDay = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+    23,
+    59,
+    59,
+  );
+
+  // Get today's quotes
+  const { data: quotes } = await supabase
+    .from("quotes")
+    .select(
+      "id, quote_number, content, created_at, clients(first_name, last_name)",
+    )
+    .eq("company_id", company.id)
+    .gte("created_at", startOfDay.toISOString())
+    .lte("created_at", endOfDay.toISOString())
+    .order("created_at", { ascending: false });
+
+  // Get today's invoices
+  const { data: invoices } = await supabase
+    .from("invoices")
+    .select(
+      "id, invoice_number, content, created_at, clients(first_name, last_name)",
+    )
+    .eq("company_id", company.id)
+    .gte("created_at", startOfDay.toISOString())
+    .lte("created_at", endOfDay.toISOString())
+    .order("created_at", { ascending: false });
+
+  const activities: RecentActivity[] = [];
+
+  // Add quotes to activities
+  quotes?.forEach((quote) => {
+    const content = quote.content as { totalTTC?: number } | null;
+    const client = quote.clients as unknown as {
+      first_name: string | null;
+      last_name: string | null;
+    } | null;
+    const clientName = client
+      ? [client.first_name, client.last_name].filter(Boolean).join(" ") || null
+      : null;
+
+    activities.push({
+      id: quote.id,
+      type: "quote",
+      number: quote.quote_number,
+      clientName,
+      totalTTC: content?.totalTTC || 0,
+      createdAt: quote.created_at,
+    });
+  });
+
+  // Add invoices to activities
+  invoices?.forEach((invoice) => {
+    const content = invoice.content as { totalTTC?: number } | null;
+    const client = invoice.clients as unknown as {
+      first_name: string | null;
+      last_name: string | null;
+    } | null;
+    const clientName = client
+      ? [client.first_name, client.last_name].filter(Boolean).join(" ") || null
+      : null;
+
+    activities.push({
+      id: invoice.id,
+      type: "invoice",
+      number: invoice.invoice_number,
+      clientName,
+      totalTTC: content?.totalTTC || 0,
+      createdAt: invoice.created_at,
+    });
+  });
+
+  // Sort by created_at descending
+  activities.sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
+
+  return activities;
 }

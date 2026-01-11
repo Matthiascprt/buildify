@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Send, Mic } from "lucide-react";
+import { Send, Mic, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import type { DocumentData, DocumentCompany } from "@/lib/types/document";
 import { createEmptyQuote, createEmptyInvoice } from "@/lib/types/document";
 import type { Company, Client } from "@/lib/supabase/types";
+import { ClientPickerModal } from "./client-picker-modal";
 
 interface Message {
   id: string;
@@ -35,10 +36,14 @@ export function Chat({
   onDocumentChange,
   nextQuoteNumber,
   nextInvoiceNumber,
-  isEditingExisting = false,
+  isEditingExisting: initialIsEditingExisting = false,
 }: ChatProps) {
+  const [isEditingExisting, setIsEditingExisting] = useState(
+    initialIsEditingExisting,
+  );
+
   const getInitialMessage = () => {
-    if (isEditingExisting) {
+    if (initialIsEditingExisting) {
       return "Bonjour ! Que souhaitez-vous modifier sur ce document ?";
     }
     return "Bonjour ! Que souhaitez-vous créer ?";
@@ -51,16 +56,43 @@ export function Chat({
       content: getInitialMessage(),
     },
   ]);
-  const [showQuickActions, setShowQuickActions] = useState(!isEditingExisting);
+  const [showQuickActions, setShowQuickActions] = useState(
+    !initialIsEditingExisting,
+  );
+  const [showClientPicker, setShowClientPicker] = useState(false);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Show client picker button when document exists and no client is linked
+  const shouldShowClientButton =
+    document !== null && !document.client?.id && !isEditingExisting;
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  // Reset chat when document is deleted (goes from non-null to null)
+  const prevDocumentRef = useRef<DocumentData | null>(document);
+  useEffect(() => {
+    const prevDocument = prevDocumentRef.current;
+    prevDocumentRef.current = document;
+
+    // If document was deleted (had a value before, now null)
+    if (prevDocument !== null && document === null) {
+      setMessages([
+        {
+          id: "1",
+          role: "assistant",
+          content: "Bonjour ! Que souhaitez-vous créer ?",
+        },
+      ]);
+      setShowQuickActions(true);
+      setIsEditingExisting(false);
+    }
+  }, [document]);
 
   const sendMessage = async (
     content: string,
@@ -146,6 +178,32 @@ export function Chat({
     }
   };
 
+  const handleClientSelect = async (client: Client) => {
+    if (!document) return;
+
+    const clientName = [client.first_name, client.last_name]
+      .filter(Boolean)
+      .join(" ");
+
+    // Update document with client info
+    const updatedDocument: DocumentData = {
+      ...document,
+      client: {
+        id: client.id,
+        name: clientName,
+        address: "",
+        city: "",
+        phone: client.phone || "",
+        email: client.email || "",
+      },
+    };
+
+    onDocumentChange(updatedDocument);
+
+    // Send message as if user typed the client name
+    await sendMessage(`Le client est ${clientName}`, updatedDocument);
+  };
+
   const handleQuickAction = async (type: "quote" | "invoice") => {
     setShowQuickActions(false);
     setIsLoading(true);
@@ -217,7 +275,13 @@ export function Chat({
   };
 
   return (
-    <div className="grid h-full grid-rows-[auto_1fr_auto]">
+    <div className="relative grid h-full grid-rows-[auto_1fr_auto]">
+      <ClientPickerModal
+        clients={clients}
+        isOpen={showClientPicker}
+        onClose={() => setShowClientPicker(false)}
+        onSelect={handleClientSelect}
+      />
       <div className="border-b px-4 py-3">
         <div className="flex items-center gap-3">
           <Avatar className="h-10 w-10">
@@ -305,6 +369,20 @@ export function Chat({
                     </Button>
                   </div>
                 )}
+                {shouldShowClientButton &&
+                  message.role === "assistant" &&
+                  message.id !== "1" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="rounded-full gap-2"
+                      onClick={() => setShowClientPicker(true)}
+                      disabled={isLoading}
+                    >
+                      <UserPlus className="h-4 w-4" />
+                      Lier un client
+                    </Button>
+                  )}
               </div>
             </div>
           ))}

@@ -196,54 +196,15 @@ function DocumentRow({ document, onClick }: DocumentRowProps) {
       className="flex items-center gap-4 p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors cursor-pointer"
       onClick={onClick}
     >
-      <div
-        className={`
-          shrink-0 w-12 h-14 rounded border-2 flex flex-col items-center justify-center
-          ${
-            isDevis
-              ? "border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950"
-              : "border-emerald-200 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950"
-          }
-        `}
-      >
-        <div
-          className={`
-            w-6 h-0.5 rounded-full mb-1
-            ${isDevis ? "bg-blue-300 dark:bg-blue-700" : "bg-emerald-300 dark:bg-emerald-700"}
-          `}
-        />
-        <div
-          className={`
-            w-4 h-0.5 rounded-full mb-1.5
-            ${isDevis ? "bg-blue-200 dark:bg-blue-800" : "bg-emerald-200 dark:bg-emerald-800"}
-          `}
-        />
+      <div className="shrink-0 w-12 h-14 rounded border-2 flex flex-col items-center justify-center border-orange-200 bg-orange-50 dark:border-orange-900 dark:bg-orange-950">
+        <div className="w-6 h-0.5 rounded-full mb-1 bg-orange-300 dark:bg-orange-700" />
+        <div className="w-4 h-0.5 rounded-full mb-1.5 bg-orange-200 dark:bg-orange-800" />
         <div className="space-y-0.5">
-          <div
-            className={`
-              w-5 h-0.5 rounded-full
-              ${isDevis ? "bg-blue-200 dark:bg-blue-800" : "bg-emerald-200 dark:bg-emerald-800"}
-            `}
-          />
-          <div
-            className={`
-              w-5 h-0.5 rounded-full
-              ${isDevis ? "bg-blue-200 dark:bg-blue-800" : "bg-emerald-200 dark:bg-emerald-800"}
-            `}
-          />
-          <div
-            className={`
-              w-3 h-0.5 rounded-full
-              ${isDevis ? "bg-blue-200 dark:bg-blue-800" : "bg-emerald-200 dark:bg-emerald-800"}
-            `}
-          />
+          <div className="w-5 h-0.5 rounded-full bg-orange-200 dark:bg-orange-800" />
+          <div className="w-5 h-0.5 rounded-full bg-orange-200 dark:bg-orange-800" />
+          <div className="w-3 h-0.5 rounded-full bg-orange-200 dark:bg-orange-800" />
         </div>
-        <span
-          className={`
-            text-[6px] font-bold mt-1
-            ${isDevis ? "text-blue-500 dark:text-blue-400" : "text-emerald-500 dark:text-emerald-400"}
-          `}
-        >
+        <span className="text-[6px] font-bold mt-1 text-orange-500 dark:text-orange-400">
           {isDevis ? "DEV" : "FAC"}
         </span>
       </div>
