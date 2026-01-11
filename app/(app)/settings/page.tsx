@@ -22,6 +22,13 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -259,21 +266,25 @@ export default function SettingsPage() {
                   name="vatRate"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Taux de TVA par défaut (%)</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          placeholder="20"
-                          {...field}
-                          onChange={(e) =>
-                            field.onChange(
-                              e.target.value === ""
-                                ? undefined
-                                : Number(e.target.value),
-                            )
-                          }
-                        />
-                      </FormControl>
+                      <FormLabel>Taux de TVA par défaut</FormLabel>
+                      <Select
+                        value={field.value?.toString() ?? "20"}
+                        onValueChange={(value) =>
+                          field.onChange(value === "0" ? 0 : Number(value))
+                        }
+                      >
+                        <FormControl>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Sélectionner un taux" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="20">20%</SelectItem>
+                          <SelectItem value="10">10%</SelectItem>
+                          <SelectItem value="5.5">5,5%</SelectItem>
+                          <SelectItem value="0">Aucune</SelectItem>
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}

@@ -43,30 +43,27 @@ export type CompanyUpdate = Partial<
 >;
 
 export type Quote = {
-  id: string;
+  id: number;
   created_at: string;
-  company_id: string;
+  company_id: string | null;
   client_id: number | null;
-  quote_number: string;
+  quote_number: string | null;
   valid_until: string | null;
-  content: Record<string, unknown>;
+  content: Record<string, unknown> | null;
   payment_terms: string | null;
   pdf_url: string | null;
-  status: "draft" | "sent" | "accepted" | "refused";
 };
 
 export type Invoice = {
-  id: string;
+  id: number;
   created_at: string;
-  company_id: string;
+  company_id: string | null;
   client_id: number | null;
-  invoice_number: string;
+  invoice_number: string | null;
   due_date: string | null;
-  content: Record<string, unknown>;
+  content: Record<string, unknown> | null;
   payment_terms: string | null;
   pdf_url: string | null;
-  status: "draft" | "sent" | "paid" | "overdue";
-  quote_id: string | null;
 };
 
 export type QuoteInsert = Omit<Quote, "id" | "created_at">;

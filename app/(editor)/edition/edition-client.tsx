@@ -10,33 +10,51 @@ interface EditionClientProps {
   userInitial: string;
   company: Company | null;
   clients: Client[];
-}
-
-function generateDocumentNumber(prefix: string): string {
-  const year = new Date().getFullYear();
-  const random = Math.floor(Math.random() * 9000) + 1000;
-  return `${prefix}-${year}-${random}`;
+  initialNextQuoteNumber: string;
+  initialNextInvoiceNumber: string;
+  initialDocument?: DocumentData | null;
 }
 
 export function EditionClient({
   userInitial,
   company,
   clients,
+  initialNextQuoteNumber,
+  initialNextInvoiceNumber,
+  initialDocument = null,
 }: EditionClientProps) {
-  const [document, setDocument] = useState<DocumentData | null>(null);
-  const [nextQuoteNumber, setNextQuoteNumber] = useState(() =>
-    generateDocumentNumber("DEV"),
+  const [document, setDocument] = useState<DocumentData | null>(
+    initialDocument,
   );
-  const [nextInvoiceNumber, setNextInvoiceNumber] = useState(() =>
-    generateDocumentNumber("FAC"),
+  const [nextQuoteNumber, setNextQuoteNumber] = useState(
+    initialNextQuoteNumber,
+  );
+  const [nextInvoiceNumber, setNextInvoiceNumber] = useState(
+    initialNextInvoiceNumber,
   );
 
   const handleDocumentChange = (newDocument: DocumentData | null) => {
     setDocument(newDocument);
-    if (newDocument?.type === "quote") {
-      setNextQuoteNumber(generateDocumentNumber("DEV"));
-    } else if (newDocument?.type === "invoice") {
-      setNextInvoiceNumber(generateDocumentNumber("FAC"));
+    // Numbers are now managed by the database, so we update them after document creation
+    if (newDocument?.number) {
+      if (newDocument.type === "quote") {
+        // Increment the number for the next potential document
+        const parts = newDocument.number.split("-");
+        if (parts.length === 3) {
+          const nextSeq = (parseInt(parts[2], 10) + 1)
+            .toString()
+            .padStart(4, "0");
+          setNextQuoteNumber(`${parts[0]}-${parts[1]}-${nextSeq}`);
+        }
+      } else if (newDocument.type === "invoice") {
+        const parts = newDocument.number.split("-");
+        if (parts.length === 3) {
+          const nextSeq = (parseInt(parts[2], 10) + 1)
+            .toString()
+            .padStart(4, "0");
+          setNextInvoiceNumber(`${parts[0]}-${parts[1]}-${nextSeq}`);
+        }
+      }
     }
   };
 
@@ -51,6 +69,7 @@ export function EditionClient({
           onDocumentChange={handleDocumentChange}
           nextQuoteNumber={nextQuoteNumber}
           nextInvoiceNumber={nextInvoiceNumber}
+          isEditingExisting={!!initialDocument}
         />
       </div>
       <div className="hidden lg:block h-full overflow-hidden">

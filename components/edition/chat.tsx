@@ -24,6 +24,7 @@ interface ChatProps {
   onDocumentChange: (document: DocumentData | null) => void;
   nextQuoteNumber: string;
   nextInvoiceNumber: string;
+  isEditingExisting?: boolean;
 }
 
 export function Chat({
@@ -34,15 +35,23 @@ export function Chat({
   onDocumentChange,
   nextQuoteNumber,
   nextInvoiceNumber,
+  isEditingExisting = false,
 }: ChatProps) {
+  const getInitialMessage = () => {
+    if (isEditingExisting) {
+      return "Bonjour ! Que souhaitez-vous modifier sur ce document ?";
+    }
+    return "Bonjour ! Que souhaitez-vous créer ?";
+  };
+
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "1",
       role: "assistant",
-      content: "Bonjour ! Que souhaitez-vous créer ?",
+      content: getInitialMessage(),
     },
   ]);
-  const [showQuickActions, setShowQuickActions] = useState(true);
+  const [showQuickActions, setShowQuickActions] = useState(!isEditingExisting);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -53,7 +62,10 @@ export function Chat({
     }
   }, [messages]);
 
-  const sendMessage = async (content: string) => {
+  const sendMessage = async (
+    content: string,
+    overrideDocument?: DocumentData | null,
+  ) => {
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
@@ -64,6 +76,9 @@ export function Chat({
     setMessages(newMessages);
     setInput("");
     setIsLoading(true);
+
+    const documentToSend =
+      overrideDocument !== undefined ? overrideDocument : document;
 
     try {
       const response = await fetch("/api/chat", {
@@ -76,7 +91,7 @@ export function Chat({
             role: msg.role,
             content: msg.content,
           })),
-          document,
+          document: documentToSend,
           company,
           clients,
           nextQuoteNumber,
@@ -133,6 +148,7 @@ export function Chat({
 
   const handleQuickAction = async (type: "quote" | "invoice") => {
     setShowQuickActions(false);
+    setIsLoading(true);
 
     const documentCompany: DocumentCompany = {
       name: company?.name || "",
@@ -144,22 +160,60 @@ export function Chat({
       logoUrl: company?.logo_url || undefined,
     };
 
+    const defaultTvaRate = company?.vat_rate ?? 20;
+
+    let newDocument: DocumentData;
     if (type === "quote") {
-      const initialQuote = createEmptyQuote(documentCompany, nextQuoteNumber);
-      onDocumentChange(initialQuote);
+      newDocument = createEmptyQuote(
+        documentCompany,
+        nextQuoteNumber,
+        defaultTvaRate,
+      );
     } else {
-      const initialInvoice = createEmptyInvoice(
+      newDocument = createEmptyInvoice(
         documentCompany,
         nextInvoiceNumber,
+        defaultTvaRate,
       );
-      onDocumentChange(initialInvoice);
     }
+
+    try {
+      // Create document in database
+      const response = await fetch("/api/documents", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          type,
+          content: newDocument,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        // Update document with database ID and generated number
+        newDocument = {
+          ...newDocument,
+          id: data.document.id,
+          number: data.documentNumber,
+        };
+      } else {
+        console.error("Failed to create document in database:", data.error);
+      }
+    } catch (error) {
+      console.error("Error creating document:", error);
+    }
+
+    setIsLoading(false);
+    onDocumentChange(newDocument);
 
     const content =
       type === "quote"
         ? "Je souhaite créer un devis"
         : "Je souhaite créer une facture";
-    await sendMessage(content);
+    await sendMessage(content, newDocument);
   };
 
   return (

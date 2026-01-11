@@ -32,6 +32,7 @@ export interface DocumentClient {
 
 export interface QuoteData {
   type: "quote";
+  id?: number; // Database ID
   number: string;
   date: string;
   validity: string;
@@ -50,6 +51,7 @@ export interface QuoteData {
 
 export interface InvoiceData {
   type: "invoice";
+  id?: number; // Database ID
   number: string;
   date: string;
   dueDate: string;
@@ -72,6 +74,7 @@ export type DocumentData = QuoteData | InvoiceData;
 export function createEmptyQuote(
   company: DocumentCompany,
   quoteNumber: string,
+  defaultTvaRate: number = 20,
 ): QuoteData {
   const today = new Date();
   const formattedDate = today.toLocaleDateString("fr-FR");
@@ -91,7 +94,7 @@ export function createEmptyQuote(
     projectTitle: "",
     items: [],
     totalHT: 0,
-    tvaRate: 20,
+    tvaRate: defaultTvaRate,
     tvaAmount: 0,
     deposit: 0,
     totalTTC: 0,
@@ -102,6 +105,7 @@ export function createEmptyQuote(
 export function createEmptyInvoice(
   company: DocumentCompany,
   invoiceNumber: string,
+  defaultTvaRate: number = 20,
 ): InvoiceData {
   const today = new Date();
   const formattedDate = today.toLocaleDateString("fr-FR");
@@ -123,7 +127,7 @@ export function createEmptyInvoice(
     projectTitle: "",
     items: [],
     totalHT: 0,
-    tvaRate: 20,
+    tvaRate: defaultTvaRate,
     tvaAmount: 0,
     deposit: 0,
     totalTTC: 0,
