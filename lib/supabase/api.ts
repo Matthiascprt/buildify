@@ -9,6 +9,12 @@ import type {
   Client,
   ClientInsert,
   ClientUpdate,
+  Quote,
+  QuoteInsert,
+  QuoteUpdate,
+  Invoice,
+  InvoiceInsert,
+  InvoiceUpdate,
 } from "./types";
 
 export async function getCurrentUser() {
@@ -221,6 +227,248 @@ export async function deleteClient(
 
   if (error) {
     console.error("Error deleting client:", error);
+    return { success: false, error: error.message };
+  }
+
+  return { success: true };
+}
+
+// ============ QUOTES ============
+
+export async function getQuotes(): Promise<Quote[]> {
+  const supabase = await createClient();
+  const company = await getCompany();
+
+  if (!company) return [];
+
+  const { data, error } = await supabase
+    .from("quotes")
+    .select("*")
+    .eq("company_id", company.id)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching quotes:", error);
+    return [];
+  }
+
+  return data ?? [];
+}
+
+export async function getQuote(quoteId: string): Promise<Quote | null> {
+  const supabase = await createClient();
+  const company = await getCompany();
+
+  if (!company) return null;
+
+  const { data, error } = await supabase
+    .from("quotes")
+    .select("*")
+    .eq("id", quoteId)
+    .eq("company_id", company.id)
+    .single();
+
+  if (error) {
+    console.error("Error fetching quote:", error);
+    return null;
+  }
+
+  return data;
+}
+
+export async function createQuote(
+  quoteData: Omit<QuoteInsert, "company_id">,
+): Promise<{ success: boolean; error?: string; quote?: Quote }> {
+  const supabase = await createClient();
+  const company = await getCompany();
+
+  if (!company) {
+    return { success: false, error: "Aucune entreprise associée" };
+  }
+
+  const { data, error } = await supabase
+    .from("quotes")
+    .insert({
+      ...quoteData,
+      company_id: company.id,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Error creating quote:", error);
+    return { success: false, error: error.message };
+  }
+
+  return { success: true, quote: data };
+}
+
+export async function updateQuote(
+  quoteId: string,
+  updates: QuoteUpdate,
+): Promise<{ success: boolean; error?: string; quote?: Quote }> {
+  const supabase = await createClient();
+  const company = await getCompany();
+
+  if (!company) {
+    return { success: false, error: "Aucune entreprise associée" };
+  }
+
+  const { data, error } = await supabase
+    .from("quotes")
+    .update(updates)
+    .eq("id", quoteId)
+    .eq("company_id", company.id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Error updating quote:", error);
+    return { success: false, error: error.message };
+  }
+
+  return { success: true, quote: data };
+}
+
+export async function deleteQuote(
+  quoteId: string,
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+  const company = await getCompany();
+
+  if (!company) {
+    return { success: false, error: "Aucune entreprise associée" };
+  }
+
+  const { error } = await supabase
+    .from("quotes")
+    .delete()
+    .eq("id", quoteId)
+    .eq("company_id", company.id);
+
+  if (error) {
+    console.error("Error deleting quote:", error);
+    return { success: false, error: error.message };
+  }
+
+  return { success: true };
+}
+
+// ============ INVOICES ============
+
+export async function getInvoices(): Promise<Invoice[]> {
+  const supabase = await createClient();
+  const company = await getCompany();
+
+  if (!company) return [];
+
+  const { data, error } = await supabase
+    .from("invoices")
+    .select("*")
+    .eq("company_id", company.id)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching invoices:", error);
+    return [];
+  }
+
+  return data ?? [];
+}
+
+export async function getInvoice(invoiceId: string): Promise<Invoice | null> {
+  const supabase = await createClient();
+  const company = await getCompany();
+
+  if (!company) return null;
+
+  const { data, error } = await supabase
+    .from("invoices")
+    .select("*")
+    .eq("id", invoiceId)
+    .eq("company_id", company.id)
+    .single();
+
+  if (error) {
+    console.error("Error fetching invoice:", error);
+    return null;
+  }
+
+  return data;
+}
+
+export async function createInvoice(
+  invoiceData: Omit<InvoiceInsert, "company_id">,
+): Promise<{ success: boolean; error?: string; invoice?: Invoice }> {
+  const supabase = await createClient();
+  const company = await getCompany();
+
+  if (!company) {
+    return { success: false, error: "Aucune entreprise associée" };
+  }
+
+  const { data, error } = await supabase
+    .from("invoices")
+    .insert({
+      ...invoiceData,
+      company_id: company.id,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Error creating invoice:", error);
+    return { success: false, error: error.message };
+  }
+
+  return { success: true, invoice: data };
+}
+
+export async function updateInvoice(
+  invoiceId: string,
+  updates: InvoiceUpdate,
+): Promise<{ success: boolean; error?: string; invoice?: Invoice }> {
+  const supabase = await createClient();
+  const company = await getCompany();
+
+  if (!company) {
+    return { success: false, error: "Aucune entreprise associée" };
+  }
+
+  const { data, error } = await supabase
+    .from("invoices")
+    .update(updates)
+    .eq("id", invoiceId)
+    .eq("company_id", company.id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Error updating invoice:", error);
+    return { success: false, error: error.message };
+  }
+
+  return { success: true, invoice: data };
+}
+
+export async function deleteInvoice(
+  invoiceId: string,
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+  const company = await getCompany();
+
+  if (!company) {
+    return { success: false, error: "Aucune entreprise associée" };
+  }
+
+  const { error } = await supabase
+    .from("invoices")
+    .delete()
+    .eq("id", invoiceId)
+    .eq("company_id", company.id);
+
+  if (error) {
+    console.error("Error deleting invoice:", error);
     return { success: false, error: error.message };
   }
 

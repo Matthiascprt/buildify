@@ -1,15 +1,20 @@
-import { Chat } from "@/components/edition/chat";
-import { DocumentPreview } from "@/components/edition/document-preview";
+import { getProfile, getCompany, getClients } from "@/lib/supabase/api";
+import { EditionClient } from "./edition-client";
 
-export default function EditionPage() {
+export default async function EditionPage() {
+  const [profile, company, clients] = await Promise.all([
+    getProfile(),
+    getCompany(),
+    getClients(),
+  ]);
+
+  const userInitial = profile?.last_name?.charAt(0).toUpperCase() || "U";
+
   return (
-    <div className="grid h-full grid-cols-1 lg:grid-cols-2">
-      <div className="border-r">
-        <Chat />
-      </div>
-      <div className="hidden lg:block">
-        <DocumentPreview />
-      </div>
-    </div>
+    <EditionClient
+      userInitial={userInitial}
+      company={company}
+      clients={clients}
+    />
   );
 }

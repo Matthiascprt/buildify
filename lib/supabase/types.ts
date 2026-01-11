@@ -41,3 +41,40 @@ export type ProfileUpdate = Partial<Omit<Profile, "id" | "created_at">>;
 export type CompanyUpdate = Partial<
   Omit<Company, "id" | "created_at" | "user_id">
 >;
+
+export type Quote = {
+  id: string;
+  created_at: string;
+  company_id: string;
+  client_id: number | null;
+  quote_number: string;
+  valid_until: string | null;
+  content: Record<string, unknown>;
+  payment_terms: string | null;
+  pdf_url: string | null;
+  status: "draft" | "sent" | "accepted" | "refused";
+};
+
+export type Invoice = {
+  id: string;
+  created_at: string;
+  company_id: string;
+  client_id: number | null;
+  invoice_number: string;
+  due_date: string | null;
+  content: Record<string, unknown>;
+  payment_terms: string | null;
+  pdf_url: string | null;
+  status: "draft" | "sent" | "paid" | "overdue";
+  quote_id: string | null;
+};
+
+export type QuoteInsert = Omit<Quote, "id" | "created_at">;
+export type QuoteUpdate = Partial<
+  Omit<Quote, "id" | "created_at" | "company_id">
+>;
+
+export type InvoiceInsert = Omit<Invoice, "id" | "created_at">;
+export type InvoiceUpdate = Partial<
+  Omit<Invoice, "id" | "created_at" | "company_id">
+>;

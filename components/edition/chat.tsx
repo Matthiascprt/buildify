@@ -4,9 +4,11 @@ import { useState, useRef, useEffect } from "react";
 import { Send, Mic } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
+import type { DocumentData, DocumentCompany } from "@/lib/types/document";
+import { createEmptyQuote, createEmptyInvoice } from "@/lib/types/document";
+import type { Company, Client } from "@/lib/supabase/types";
 
 interface Message {
   id: string;
@@ -14,15 +16,33 @@ interface Message {
   content: string;
 }
 
-export function Chat() {
+interface ChatProps {
+  userInitial?: string;
+  company: Company | null;
+  clients: Client[];
+  document: DocumentData | null;
+  onDocumentChange: (document: DocumentData | null) => void;
+  nextQuoteNumber: string;
+  nextInvoiceNumber: string;
+}
+
+export function Chat({
+  userInitial = "U",
+  company,
+  clients,
+  document,
+  onDocumentChange,
+  nextQuoteNumber,
+  nextInvoiceNumber,
+}: ChatProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "1",
       role: "assistant",
-      content:
-        "Bonjour ! Je suis votre assistant pour la création de devis et factures. Comment puis-je vous aider ?",
+      content: "Bonjour ! Que souhaitez-vous créer ?",
     },
   ]);
+  const [showQuickActions, setShowQuickActions] = useState(true);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -33,30 +53,75 @@ export function Chat() {
     }
   }, [messages]);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || isLoading) return;
-
+  const sendMessage = async (content: string) => {
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
-      content: input.trim(),
+      content,
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    const newMessages = [...messages, userMessage];
+    setMessages(newMessages);
     setInput("");
     setIsLoading(true);
 
-    setTimeout(() => {
-      const assistantMessage: Message = {
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messages: newMessages.map((msg) => ({
+            role: msg.role,
+            content: msg.content,
+          })),
+          document,
+          company,
+          clients,
+          nextQuoteNumber,
+          nextInvoiceNumber,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        const assistantMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: "assistant",
+          content: data.message,
+        };
+        setMessages((prev) => [...prev, assistantMessage]);
+
+        if (data.document !== undefined) {
+          onDocumentChange(data.document);
+        }
+      } else {
+        const errorMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: "assistant",
+          content: "Désolé, une erreur est survenue. Veuillez réessayer.",
+        };
+        setMessages((prev) => [...prev, errorMessage]);
+      }
+    } catch {
+      const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
         content:
-          "Je comprends votre demande. Cette fonctionnalité sera bientôt disponible pour générer vos documents.",
+          "Désolé, une erreur de connexion est survenue. Veuillez réessayer.",
       };
-      setMessages((prev) => [...prev, assistantMessage]);
+      setMessages((prev) => [...prev, errorMessage]);
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim() || isLoading) return;
+    await sendMessage(input.trim());
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -66,16 +131,60 @@ export function Chat() {
     }
   };
 
+  const handleQuickAction = async (type: "quote" | "invoice") => {
+    setShowQuickActions(false);
+
+    const documentCompany: DocumentCompany = {
+      name: company?.name || "",
+      address: company?.address || "",
+      city: "",
+      phone: company?.phone || "",
+      email: company?.email || "",
+      siret: company?.siret || "",
+      logoUrl: company?.logo_url || undefined,
+    };
+
+    if (type === "quote") {
+      const initialQuote = createEmptyQuote(documentCompany, nextQuoteNumber);
+      onDocumentChange(initialQuote);
+    } else {
+      const initialInvoice = createEmptyInvoice(
+        documentCompany,
+        nextInvoiceNumber,
+      );
+      onDocumentChange(initialInvoice);
+    }
+
+    const content =
+      type === "quote"
+        ? "Je souhaite créer un devis"
+        : "Je souhaite créer une facture";
+    await sendMessage(content);
+  };
+
   return (
-    <div className="flex h-full flex-col">
+    <div className="grid h-full grid-rows-[auto_1fr_auto]">
       <div className="border-b px-4 py-3">
-        <h2 className="font-semibold">Assistant IA</h2>
-        <p className="text-sm text-muted-foreground">
-          Créez vos devis et factures par conversation
-        </p>
+        <div className="flex items-center gap-3">
+          <Avatar className="h-10 w-10">
+            <AvatarImage
+              src="https://ckvcijpgohqlnvoinwmc.supabase.co/storage/v1/object/public/buildify-assets/Logo/Agent%20IA.png"
+              alt="Max"
+            />
+            <AvatarFallback className="bg-primary text-primary-foreground">
+              M
+            </AvatarFallback>
+          </Avatar>
+          <div>
+            <h2 className="font-semibold">Max</h2>
+            <p className="text-sm text-muted-foreground">
+              Créez vos devis et factures avec Max
+            </p>
+          </div>
+        </div>
       </div>
 
-      <ScrollArea className="flex-1 p-4" ref={scrollRef}>
+      <div className="overflow-y-auto min-h-0 p-4" ref={scrollRef}>
         <div className="space-y-4">
           {messages.map((message) => (
             <div
@@ -86,33 +195,74 @@ export function Chat() {
               )}
             >
               <Avatar className="h-8 w-8 shrink-0">
-                <AvatarFallback
-                  className={cn(
-                    message.role === "assistant"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted",
-                  )}
-                >
-                  {message.role === "assistant" ? "IA" : "U"}
-                </AvatarFallback>
+                {message.role === "assistant" ? (
+                  <>
+                    <AvatarImage
+                      src="https://ckvcijpgohqlnvoinwmc.supabase.co/storage/v1/object/public/buildify-assets/Logo/Agent%20IA.png"
+                      alt="Max"
+                    />
+                    <AvatarFallback className="bg-primary text-primary-foreground">
+                      M
+                    </AvatarFallback>
+                  </>
+                ) : (
+                  <AvatarFallback className="bg-muted">
+                    {userInitial}
+                  </AvatarFallback>
+                )}
               </Avatar>
               <div
                 className={cn(
-                  "max-w-[80%] rounded-2xl px-4 py-2.5",
-                  message.role === "assistant"
-                    ? "bg-muted"
-                    : "bg-primary text-primary-foreground",
+                  "flex flex-col gap-2 flex-1 min-w-0",
+                  message.role === "user" && "items-end",
                 )}
               >
-                <p className="text-sm">{message.content}</p>
+                <div
+                  className={cn(
+                    "rounded-2xl px-4 py-2.5 w-fit max-w-[85%]",
+                    message.role === "assistant"
+                      ? "bg-muted"
+                      : "bg-primary text-primary-foreground",
+                  )}
+                >
+                  <p className="text-sm whitespace-pre-wrap">
+                    {message.content}
+                  </p>
+                </div>
+                {message.id === "1" && showQuickActions && (
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="rounded-full"
+                      onClick={() => handleQuickAction("quote")}
+                      disabled={isLoading}
+                    >
+                      Devis
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="rounded-full"
+                      onClick={() => handleQuickAction("invoice")}
+                      disabled={isLoading}
+                    >
+                      Facture
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           ))}
           {isLoading && (
             <div className="flex gap-3">
               <Avatar className="h-8 w-8 shrink-0">
+                <AvatarImage
+                  src="https://ckvcijpgohqlnvoinwmc.supabase.co/storage/v1/object/public/buildify-assets/Logo/Agent%20IA.png"
+                  alt="Max"
+                />
                 <AvatarFallback className="bg-primary text-primary-foreground">
-                  IA
+                  M
                 </AvatarFallback>
               </Avatar>
               <div className="rounded-2xl bg-muted px-4 py-2.5">
@@ -125,7 +275,7 @@ export function Chat() {
             </div>
           )}
         </div>
-      </ScrollArea>
+      </div>
 
       <form onSubmit={handleSubmit} className="border-t p-4">
         <div className="flex gap-2">
