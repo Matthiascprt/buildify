@@ -8,6 +8,7 @@ export interface LineItem {
   total?: number;
   isSection?: boolean;
   sectionTotal?: number;
+  sectionTotalTTC?: number;
 }
 
 export interface DocumentCompany {

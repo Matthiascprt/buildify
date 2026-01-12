@@ -35,6 +35,7 @@ interface LineItem {
   total?: number;
   isSection?: boolean;
   sectionTotal?: number;
+  sectionTotalTTC?: number;
 }
 
 interface InvoiceData {
@@ -325,7 +326,7 @@ export function InvoiceTemplate({
               <th
                 className={`px-3 py-2 font-semibold text-right ${!hasCustomColor ? "text-muted-foreground" : ""}`}
               >
-                Total HT
+                Total TTC
               </th>
             </tr>
           </thead>
@@ -351,7 +352,7 @@ export function InvoiceTemplate({
                     <td></td>
                     <td></td>
                     <td className="px-3 py-2 font-bold text-right">
-                      {formatPrice(item.sectionTotal)} €
+                      {formatPrice(item.sectionTotalTTC ?? item.sectionTotal)} €
                     </td>
                   </>
                 ) : (
@@ -409,7 +410,10 @@ export function InvoiceTemplate({
                       />
                     </td>
                     <td className="px-3 py-2 text-right">
-                      {formatPrice(item.total)} €
+                      {formatPrice(
+                        (item.total || 0) * (1 + (item.tva || 0) / 100),
+                      )}{" "}
+                      €
                     </td>
                   </>
                 )}
@@ -427,7 +431,7 @@ export function InvoiceTemplate({
             <span>{formatPrice(data.totalHT)} €</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-muted-foreground">TVA {data.tvaRate}%</span>
+            <span className="text-muted-foreground">Total TVA</span>
             <span>{formatPrice(data.tvaAmount)} €</span>
           </div>
           <div className="flex justify-between">

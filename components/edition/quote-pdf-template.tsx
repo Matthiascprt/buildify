@@ -246,6 +246,7 @@ interface LineItem {
   total?: number;
   isSection?: boolean;
   sectionTotal?: number;
+  sectionTotalTTC?: number;
 }
 
 interface QuoteData {
@@ -382,7 +383,7 @@ export function QuotePDFTemplate({ data, accentColor }: QuotePDFTemplateProps) {
                 { color: textColor },
               ]}
             >
-              Total HT
+              Total TTC
             </Text>
           </View>
           {data.items.map((item, index) => (
@@ -424,8 +425,8 @@ export function QuotePDFTemplate({ data, accentColor }: QuotePDFTemplateProps) {
                 ]}
               >
                 {item.isSection
-                  ? `${formatPrice(item.sectionTotal)} €`
-                  : `${formatPrice(item.total)} €`}
+                  ? `${formatPrice(item.sectionTotalTTC ?? item.sectionTotal)} €`
+                  : `${formatPrice((item.total || 0) * (1 + (item.tva || 0) / 100))} €`}
               </Text>
             </View>
           ))}
@@ -441,7 +442,7 @@ export function QuotePDFTemplate({ data, accentColor }: QuotePDFTemplateProps) {
               </Text>
             </View>
             <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>TVA {data.tvaRate}%</Text>
+              <Text style={styles.totalLabel}>Total TVA</Text>
               <Text style={styles.totalValue}>
                 {formatPrice(data.tvaAmount)} €
               </Text>

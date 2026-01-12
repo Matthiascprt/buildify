@@ -484,6 +484,20 @@ function generateSectionId(items: LineItem[]): string {
   return `${sections.length + 1}`;
 }
 
+function isEmptyLine(item: LineItem): boolean {
+  if (item.isSection) return false;
+  return (
+    (!item.designation || item.designation.trim() === "") &&
+    (!item.description || item.description.trim() === "") &&
+    (item.unitPrice === 0 || item.unitPrice === undefined) &&
+    (item.total === 0 || item.total === undefined)
+  );
+}
+
+function findFirstEmptyLineIndex(items: LineItem[]): number {
+  return items.findIndex((item) => isEmptyLine(item));
+}
+
 function recalculateSectionTotals(items: LineItem[]): LineItem[] {
   const result: LineItem[] = [];
   let currentSectionIndex = -1;
@@ -666,6 +680,38 @@ export function executeToolCall(
           ? `${quantity} ${unit}`
           : `${quantity}`;
 
+      // Check if there's an empty line to fill instead of creating a new one
+      const emptyLineIndex = findFirstEmptyLineIndex(currentDocument.items);
+
+      if (emptyLineIndex !== -1) {
+        // Fill the empty line instead of creating a new one
+        const existingItem = currentDocument.items[emptyLineIndex];
+        const updatedItem: LineItem = {
+          ...existingItem,
+          designation: args.designation as string,
+          description: args.description as string | undefined,
+          quantity: formattedQuantity,
+          unitPrice,
+          tva,
+          total,
+        };
+
+        const newItems = [...currentDocument.items];
+        newItems[emptyLineIndex] = updatedItem;
+        const recalculatedItems = recalculateSectionTotals(newItems);
+        const totals = calculateTotals(
+          recalculatedItems,
+          currentDocument.tvaRate,
+          currentDocument.deposit,
+        );
+
+        return {
+          document: { ...currentDocument, items: recalculatedItems, ...totals },
+          result: `Ligne ${emptyLineIndex + 1} complétée: "${updatedItem.designation}" - ${total}€`,
+        };
+      }
+
+      // No empty line found, create a new one
       const newItem: LineItem = {
         id: generateLineId(currentDocument.items),
         designation: args.designation as string,

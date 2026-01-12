@@ -12,7 +12,37 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, FileText } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Plus,
+  Search,
+  FileText,
+  ArrowUpDown,
+  ArrowDown,
+  ArrowUp,
+  Check,
+  Trash2,
+  X,
+  Loader2,
+} from "lucide-react";
+import { deleteQuote, deleteInvoice } from "@/lib/supabase/api";
 import type { DocumentItem, DocumentType } from "./page";
 
 interface DocumentsClientProps {
@@ -21,12 +51,18 @@ interface DocumentsClientProps {
 
 export function DocumentsClient({ initialDocuments }: DocumentsClientProps) {
   const router = useRouter();
+  const [documents, setDocuments] = useState(initialDocuments);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<"all" | DocumentType>("all");
   const [sortBy, setSortBy] = useState<"numero" | "date" | "montant">("date");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [deleteMode, setDeleteMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const filteredAndSortedDocuments = useMemo(() => {
-    let filtered = initialDocuments;
+    let filtered = documents;
 
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
@@ -42,20 +78,63 @@ export function DocumentsClient({ initialDocuments }: DocumentsClientProps) {
     }
 
     const sorted = [...filtered].sort((a, b) => {
+      let comparison = 0;
       switch (sortBy) {
         case "numero":
-          return a.numero.localeCompare(b.numero);
+          comparison = a.numero.localeCompare(b.numero);
+          break;
         case "date":
-          return b.dateCreation.getTime() - a.dateCreation.getTime();
+          comparison = a.dateCreation.getTime() - b.dateCreation.getTime();
+          break;
         case "montant":
-          return b.totalTTC - a.totalTTC;
-        default:
-          return 0;
+          comparison = a.totalTTC - b.totalTTC;
+          break;
       }
+      return sortOrder === "asc" ? comparison : -comparison;
     });
 
     return sorted;
-  }, [initialDocuments, searchQuery, filterType, sortBy]);
+  }, [documents, searchQuery, filterType, sortBy, sortOrder]);
+
+  const toggleSelectDocument = (docId: string) => {
+    setSelectedIds((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(docId)) {
+        newSet.delete(docId);
+      } else {
+        newSet.add(docId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleDeleteSelected = async () => {
+    setIsDeleting(true);
+    const selectedDocs = documents.filter((doc) =>
+      selectedIds.has(`${doc.type}-${doc.id}`),
+    );
+
+    for (const doc of selectedDocs) {
+      if (doc.type === "devis") {
+        await deleteQuote(doc.id);
+      } else {
+        await deleteInvoice(doc.id);
+      }
+    }
+
+    setDocuments((prev) =>
+      prev.filter((doc) => !selectedIds.has(`${doc.type}-${doc.id}`)),
+    );
+    setSelectedIds(new Set());
+    setDeleteMode(false);
+    setShowDeleteConfirm(false);
+    setIsDeleting(false);
+  };
+
+  const exitDeleteMode = () => {
+    setDeleteMode(false);
+    setSelectedIds(new Set());
+  };
 
   const handleDocumentClick = (doc: DocumentItem) => {
     const type = doc.type === "devis" ? "quote" : "invoice";
@@ -100,26 +179,93 @@ export function DocumentsClient({ initialDocuments }: DocumentsClientProps) {
           </SelectContent>
         </Select>
 
-        <Select
-          value={sortBy}
-          onValueChange={(value) =>
-            setSortBy(value as "numero" | "date" | "montant")
-          }
-        >
-          <SelectTrigger className="w-full sm:w-auto sm:min-w-[180px]">
-            <SelectValue placeholder="Trier par" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="numero">Numéro</SelectItem>
-            <SelectItem value="date">Date (récent → ancien)</SelectItem>
-            <SelectItem value="montant">Montant (↓)</SelectItem>
-          </SelectContent>
-        </Select>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              className="w-full sm:w-auto sm:min-w-[140px]"
+            >
+              <ArrowUpDown className="h-4 w-4 mr-2" />
+              Trier
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-[180px] p-2">
+            <div className="flex gap-2 mb-2">
+              <Button
+                variant={sortOrder === "asc" ? "default" : "ghost"}
+                size="sm"
+                className="flex-1 h-8"
+                onClick={() => setSortOrder("asc")}
+              >
+                <ArrowUp className="h-4 w-4 mr-1" />
+                Asc
+              </Button>
+              <Button
+                variant={sortOrder === "desc" ? "default" : "ghost"}
+                size="sm"
+                className="flex-1 h-8"
+                onClick={() => setSortOrder("desc")}
+              >
+                <ArrowDown className="h-4 w-4 mr-1" />
+                Desc
+              </Button>
+            </div>
+            <DropdownMenuSeparator className="mx-0" />
+            <DropdownMenuItem
+              onClick={() => setSortBy("numero")}
+              className="mt-1"
+            >
+              {sortBy === "numero" && <Check className="h-4 w-4 mr-2" />}
+              <span className={sortBy !== "numero" ? "ml-6" : ""}>Numéro</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setSortBy("date")}>
+              {sortBy === "date" && <Check className="h-4 w-4 mr-2" />}
+              <span className={sortBy !== "date" ? "ml-6" : ""}>Date</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setSortBy("montant")}>
+              {sortBy === "montant" && <Check className="h-4 w-4 mr-2" />}
+              <span className={sortBy !== "montant" ? "ml-6" : ""}>
+                Montant
+              </span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
-        <Button className="w-full sm:w-auto" onClick={handleNewDocument}>
-          <Plus className="h-4 w-4 mr-2" />
-          Nouveau document
-        </Button>
+        {deleteMode ? (
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={exitDeleteMode}
+            className="shrink-0"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        ) : (
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setDeleteMode(true)}
+            className="shrink-0"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        )}
+
+        {deleteMode && selectedIds.size > 0 ? (
+          <Button
+            variant="destructive"
+            className="w-full sm:w-auto"
+            onClick={() => setShowDeleteConfirm(true)}
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Supprimer ({selectedIds.size})
+          </Button>
+        ) : (
+          <Button className="w-full sm:w-auto" onClick={handleNewDocument}>
+            <Plus className="h-4 w-4 mr-2" />
+            Nouveau document
+          </Button>
+        )}
       </div>
 
       <Card>
@@ -158,12 +304,40 @@ export function DocumentsClient({ initialDocuments }: DocumentsClientProps) {
                   key={`${doc.type}-${doc.id}`}
                   document={doc}
                   onClick={() => handleDocumentClick(doc)}
+                  deleteMode={deleteMode}
+                  isSelected={selectedIds.has(`${doc.type}-${doc.id}`)}
+                  onToggleSelect={() =>
+                    toggleSelectDocument(`${doc.type}-${doc.id}`)
+                  }
                 />
               ))}
             </div>
           )}
         </CardContent>
       </Card>
+
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
+            <AlertDialogDescription>
+              Êtes-vous sûr de vouloir supprimer {selectedIds.size} document
+              {selectedIds.size > 1 ? "s" : ""} ? Cette action est irréversible.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteSelected}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={isDeleting}
+            >
+              {isDeleting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -171,9 +345,18 @@ export function DocumentsClient({ initialDocuments }: DocumentsClientProps) {
 interface DocumentRowProps {
   document: DocumentItem;
   onClick: () => void;
+  deleteMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: () => void;
 }
 
-function DocumentRow({ document, onClick }: DocumentRowProps) {
+function DocumentRow({
+  document,
+  onClick,
+  deleteMode,
+  isSelected,
+  onToggleSelect,
+}: DocumentRowProps) {
   const isDevis = document.type === "devis";
 
   const formatDate = (date: Date) => {
@@ -191,11 +374,29 @@ function DocumentRow({ document, onClick }: DocumentRowProps) {
     }).format(amount);
   };
 
+  const handleClick = () => {
+    if (deleteMode && onToggleSelect) {
+      onToggleSelect();
+    } else {
+      onClick();
+    }
+  };
+
   return (
     <div
-      className="flex items-center gap-4 p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors cursor-pointer"
-      onClick={onClick}
+      className={`flex items-center gap-4 p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors cursor-pointer ${
+        isSelected ? "ring-2 ring-destructive bg-destructive/5" : ""
+      }`}
+      onClick={handleClick}
     >
+      {deleteMode && (
+        <Checkbox
+          checked={isSelected}
+          onCheckedChange={() => onToggleSelect?.()}
+          onClick={(e) => e.stopPropagation()}
+          className="shrink-0"
+        />
+      )}
       <div className="shrink-0 w-12 h-14 rounded border-2 flex flex-col items-center justify-center border-orange-200 bg-orange-50 dark:border-orange-500/40 dark:bg-orange-500/10">
         <div className="w-6 h-0.5 rounded-full mb-1 bg-orange-300 dark:bg-orange-400" />
         <div className="w-4 h-0.5 rounded-full mb-1.5 bg-orange-200 dark:bg-orange-500/50" />

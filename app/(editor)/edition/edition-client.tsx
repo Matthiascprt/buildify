@@ -29,14 +29,19 @@ function recalculateSectionTotals(items: LineItem[]): LineItem[] {
     if (item.isSection) {
       if (currentSectionIndex >= 0) {
         let sectionTotal = 0;
+        let sectionTotalTTC = 0;
         for (let j = currentSectionIndex + 1; j < i; j++) {
           if (!items[j].isSection) {
-            sectionTotal += items[j].total || 0;
+            const lineTotal = items[j].total || 0;
+            const lineTva = items[j].tva || 0;
+            sectionTotal += lineTotal;
+            sectionTotalTTC += lineTotal * (1 + lineTva / 100);
           }
         }
         result[currentSectionIndex] = {
           ...result[currentSectionIndex],
           sectionTotal,
+          sectionTotalTTC: Math.round(sectionTotalTTC * 100) / 100,
         };
       }
       result.push({ ...item });
@@ -48,14 +53,19 @@ function recalculateSectionTotals(items: LineItem[]): LineItem[] {
 
   if (currentSectionIndex >= 0) {
     let sectionTotal = 0;
+    let sectionTotalTTC = 0;
     for (let j = currentSectionIndex + 1; j < result.length; j++) {
       if (!result[j].isSection) {
-        sectionTotal += result[j].total || 0;
+        const lineTotal = result[j].total || 0;
+        const lineTva = result[j].tva || 0;
+        sectionTotal += lineTotal;
+        sectionTotalTTC += lineTotal * (1 + lineTva / 100);
       }
     }
     result[currentSectionIndex] = {
       ...result[currentSectionIndex],
       sectionTotal,
+      sectionTotalTTC: Math.round(sectionTotalTTC * 100) / 100,
     };
   }
 
@@ -94,31 +104,6 @@ export function EditionClient({
     initialAccentColor,
   );
 
-  const handleDocumentChange = (newDocument: DocumentData | null) => {
-    setDocument(newDocument);
-    // Numbers are now managed by the database, so we update them after document creation
-    if (newDocument?.number) {
-      if (newDocument.type === "quote") {
-        // Increment the number for the next potential document
-        const parts = newDocument.number.split("-");
-        if (parts.length === 3) {
-          const nextSeq = (parseInt(parts[2], 10) + 1)
-            .toString()
-            .padStart(4, "0");
-          setNextQuoteNumber(`${parts[0]}-${parts[1]}-${nextSeq}`);
-        }
-      } else if (newDocument.type === "invoice") {
-        const parts = newDocument.number.split("-");
-        if (parts.length === 3) {
-          const nextSeq = (parseInt(parts[2], 10) + 1)
-            .toString()
-            .padStart(4, "0");
-          setNextInvoiceNumber(`${parts[0]}-${parts[1]}-${nextSeq}`);
-        }
-      }
-    }
-  };
-
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const previousClientNameRef = useRef<string | undefined>(
@@ -137,6 +122,47 @@ export function EditionClient({
       await updateInvoice(id, { content: contentWithoutIdType });
     }
   }, []);
+
+  const handleDocumentChange = useCallback(
+    (newDocument: DocumentData | null) => {
+      setDocument(newDocument);
+
+      // Save to database when AI updates the document
+      if (newDocument?.id) {
+        // Clear any pending save timeout
+        if (saveTimeoutRef.current) {
+          clearTimeout(saveTimeoutRef.current);
+        }
+        // Save with small debounce to batch rapid updates
+        saveTimeoutRef.current = setTimeout(() => {
+          saveToDatabase(newDocument);
+        }, 100);
+      }
+
+      // Numbers are now managed by the database, so we update them after document creation
+      if (newDocument?.number) {
+        if (newDocument.type === "quote") {
+          // Increment the number for the next potential document
+          const parts = newDocument.number.split("-");
+          if (parts.length === 3) {
+            const nextSeq = (parseInt(parts[2], 10) + 1)
+              .toString()
+              .padStart(4, "0");
+            setNextQuoteNumber(`${parts[0]}-${parts[1]}-${nextSeq}`);
+          }
+        } else if (newDocument.type === "invoice") {
+          const parts = newDocument.number.split("-");
+          if (parts.length === 3) {
+            const nextSeq = (parseInt(parts[2], 10) + 1)
+              .toString()
+              .padStart(4, "0");
+            setNextInvoiceNumber(`${parts[0]}-${parts[1]}-${nextSeq}`);
+          }
+        }
+      }
+    },
+    [saveToDatabase],
+  );
 
   const handleAccentColorChange = useCallback(
     async (color: string | null) => {
@@ -185,6 +211,11 @@ export function EditionClient({
             const price =
               field === "unitPrice" ? (value as number) : item.unitPrice || 0;
             item.total = calculateLineTotal(qty, price);
+
+            // Synchronize global tvaRate when item TVA is changed
+            if (field === "tva") {
+              updated.tvaRate = value as number;
+            }
           }
 
           items[index] = item;

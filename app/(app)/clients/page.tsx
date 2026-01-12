@@ -17,6 +17,17 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -26,6 +37,13 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Plus,
   Search,
   Users,
@@ -34,6 +52,11 @@ import {
   Loader2,
   Trash2,
   AlertTriangle,
+  ArrowUpDown,
+  ArrowDown,
+  ArrowUp,
+  Check,
+  X,
 } from "lucide-react";
 import {
   getClients,
@@ -55,6 +78,11 @@ export default function ClientsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<"all" | ClientType>("all");
   const [sortBy, setSortBy] = useState<"name" | "date">("date");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [deleteMode, setDeleteMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   const [formData, setFormData] = useState({
     first_name: "",
@@ -111,23 +139,23 @@ export default function ClientsPage() {
       result = result.filter((client) => client.type === filterType);
     }
 
-    if (sortBy === "name") {
-      result.sort((a, b) => {
+    result.sort((a, b) => {
+      let comparison = 0;
+      if (sortBy === "name") {
         const nameA =
           `${a.first_name ?? ""} ${a.last_name ?? ""}`.toLowerCase();
         const nameB =
           `${b.first_name ?? ""} ${b.last_name ?? ""}`.toLowerCase();
-        return nameA.localeCompare(nameB);
-      });
-    } else {
-      result.sort(
-        (a, b) =>
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-      );
-    }
+        comparison = nameA.localeCompare(nameB);
+      } else {
+        comparison =
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      }
+      return sortOrder === "asc" ? comparison : -comparison;
+    });
 
     return result;
-  }, [clients, searchQuery, filterType, sortBy]);
+  }, [clients, searchQuery, filterType, sortBy, sortOrder]);
 
   const handleAddClient = () => {
     startTransition(async () => {
@@ -197,6 +225,35 @@ export default function ClientsPage() {
       type: "particulier",
     });
     setAddErrorMessage(null);
+  };
+
+  const toggleSelectClient = (clientId: number) => {
+    setSelectedIds((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(clientId)) {
+        newSet.delete(clientId);
+      } else {
+        newSet.add(clientId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleBulkDelete = async () => {
+    setIsBulkDeleting(true);
+    for (const clientId of selectedIds) {
+      await deleteClient(clientId);
+    }
+    setClients((prev) => prev.filter((c) => !selectedIds.has(c.id)));
+    setSelectedIds(new Set());
+    setDeleteMode(false);
+    setShowDeleteConfirm(false);
+    setIsBulkDeleting(false);
+  };
+
+  const exitDeleteMode = () => {
+    setDeleteMode(false);
+    setSelectedIds(new Set());
   };
 
   if (isLoading) {
@@ -272,124 +329,193 @@ export default function ClientsPage() {
         </Select>
 
         {/* Sort */}
-        <Select
-          value={sortBy}
-          onValueChange={(value) => setSortBy(value as "name" | "date")}
-        >
-          <SelectTrigger className="w-full sm:w-auto sm:min-w-[200px]">
-            <SelectValue placeholder="Trier par" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="name">Nom (A → Z)</SelectItem>
-            <SelectItem value="date">Date (récent → ancien)</SelectItem>
-          </SelectContent>
-        </Select>
-
-        {/* New Client Button */}
-        <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
-          <DialogTrigger asChild>
-            <Button className="w-full sm:w-auto">
-              <Plus className="h-4 w-4 mr-2" />
-              Nouveau client
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              className="w-full sm:w-auto sm:min-w-[140px]"
+            >
+              <ArrowUpDown className="h-4 w-4 mr-2" />
+              Trier
             </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Ajouter un client</DialogTitle>
-              <DialogDescription>
-                Remplissez les informations du nouveau client.
-              </DialogDescription>
-            </DialogHeader>
-            {addErrorMessage && (
-              <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-600 dark:text-amber-400">
-                <AlertTriangle className="h-4 w-4 shrink-0" />
-                <span className="text-sm">{addErrorMessage}</span>
-              </div>
-            )}
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="add_last_name">Nom</Label>
-                  <Input
-                    id="add_last_name"
-                    placeholder="Dupont"
-                    value={formData.last_name}
-                    onChange={(e) =>
-                      setFormData({ ...formData, last_name: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="add_first_name">Prénom</Label>
-                  <Input
-                    id="add_first_name"
-                    placeholder="Jean"
-                    value={formData.first_name}
-                    onChange={(e) =>
-                      setFormData({ ...formData, first_name: e.target.value })
-                    }
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="add_email">Email</Label>
-                <Input
-                  id="add_email"
-                  type="email"
-                  placeholder="jean.dupont@example.com"
-                  value={formData.email}
-                  onChange={(e) =>
-                    setFormData({ ...formData, email: e.target.value })
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="add_phone">Téléphone</Label>
-                <Input
-                  id="add_phone"
-                  type="tel"
-                  placeholder="06 12 34 56 78"
-                  value={formData.phone}
-                  onChange={(e) =>
-                    setFormData({ ...formData, phone: e.target.value })
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="add_type">Type</Label>
-                <Select
-                  value={formData.type}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, type: value as ClientType })
-                  }
-                >
-                  <SelectTrigger id="add_type" className="w-full">
-                    <SelectValue placeholder="Sélectionner un type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="particulier">Particulier</SelectItem>
-                    <SelectItem value="professionnel">Professionnel</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <DialogFooter>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-[180px] p-2">
+            <div className="flex gap-2 mb-2">
               <Button
-                variant="outline"
-                onClick={() => {
-                  resetForm();
-                  setIsAddModalOpen(false);
-                }}
+                variant={sortOrder === "asc" ? "default" : "ghost"}
+                size="sm"
+                className="flex-1 h-8"
+                onClick={() => setSortOrder("asc")}
               >
-                Annuler
+                <ArrowUp className="h-4 w-4 mr-1" />
+                Asc
               </Button>
-              <Button onClick={handleAddClient} disabled={isPending}>
-                {isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Ajouter
+              <Button
+                variant={sortOrder === "desc" ? "default" : "ghost"}
+                size="sm"
+                className="flex-1 h-8"
+                onClick={() => setSortOrder("desc")}
+              >
+                <ArrowDown className="h-4 w-4 mr-1" />
+                Desc
               </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            </div>
+            <DropdownMenuSeparator className="mx-0" />
+            <DropdownMenuItem
+              onClick={() => setSortBy("name")}
+              className="mt-1"
+            >
+              {sortBy === "name" && <Check className="h-4 w-4 mr-2" />}
+              <span className={sortBy !== "name" ? "ml-6" : ""}>Nom</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setSortBy("date")}>
+              {sortBy === "date" && <Check className="h-4 w-4 mr-2" />}
+              <span className={sortBy !== "date" ? "ml-6" : ""}>Date</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* Delete Mode Toggle */}
+        {deleteMode ? (
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={exitDeleteMode}
+            className="shrink-0"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        ) : (
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setDeleteMode(true)}
+            className="shrink-0"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        )}
+
+        {/* New Client / Delete Button */}
+        {deleteMode && selectedIds.size > 0 ? (
+          <Button
+            variant="destructive"
+            className="w-full sm:w-auto"
+            onClick={() => setShowDeleteConfirm(true)}
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Supprimer ({selectedIds.size})
+          </Button>
+        ) : (
+          <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
+            <DialogTrigger asChild>
+              <Button className="w-full sm:w-auto">
+                <Plus className="h-4 w-4 mr-2" />
+                Nouveau client
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Ajouter un client</DialogTitle>
+                <DialogDescription>
+                  Remplissez les informations du nouveau client.
+                </DialogDescription>
+              </DialogHeader>
+              {addErrorMessage && (
+                <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-600 dark:text-amber-400">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  <span className="text-sm">{addErrorMessage}</span>
+                </div>
+              )}
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="add_last_name">Nom</Label>
+                    <Input
+                      id="add_last_name"
+                      placeholder="Dupont"
+                      value={formData.last_name}
+                      onChange={(e) =>
+                        setFormData({ ...formData, last_name: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="add_first_name">Prénom</Label>
+                    <Input
+                      id="add_first_name"
+                      placeholder="Jean"
+                      value={formData.first_name}
+                      onChange={(e) =>
+                        setFormData({ ...formData, first_name: e.target.value })
+                      }
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="add_email">Email</Label>
+                  <Input
+                    id="add_email"
+                    type="email"
+                    placeholder="jean.dupont@example.com"
+                    value={formData.email}
+                    onChange={(e) =>
+                      setFormData({ ...formData, email: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="add_phone">Téléphone</Label>
+                  <Input
+                    id="add_phone"
+                    type="tel"
+                    placeholder="06 12 34 56 78"
+                    value={formData.phone}
+                    onChange={(e) =>
+                      setFormData({ ...formData, phone: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="add_type">Type</Label>
+                  <Select
+                    value={formData.type}
+                    onValueChange={(value) =>
+                      setFormData({ ...formData, type: value as ClientType })
+                    }
+                  >
+                    <SelectTrigger id="add_type" className="w-full">
+                      <SelectValue placeholder="Sélectionner un type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="particulier">Particulier</SelectItem>
+                      <SelectItem value="professionnel">
+                        Professionnel
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    resetForm();
+                    setIsAddModalOpen(false);
+                  }}
+                >
+                  Annuler
+                </Button>
+                <Button onClick={handleAddClient} disabled={isPending}>
+                  {isPending && (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  )}
+                  Ajouter
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
 
       {/* Clients Card */}
@@ -432,6 +558,9 @@ export default function ClientsPage() {
                   key={client.id}
                   client={client}
                   onClick={() => handleSelectClient(client)}
+                  deleteMode={deleteMode}
+                  isSelected={selectedIds.has(client.id)}
+                  onToggleSelect={() => toggleSelectClient(client.id)}
                 />
               ))}
             </div>
@@ -596,6 +725,31 @@ export default function ClientsPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
+            <AlertDialogDescription>
+              Êtes-vous sûr de vouloir supprimer {selectedIds.size} client
+              {selectedIds.size > 1 ? "s" : ""} ? Cette action est irréversible.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={isBulkDeleting}
+            >
+              {isBulkDeleting && (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              )}
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -603,18 +757,45 @@ export default function ClientsPage() {
 interface ClientRowProps {
   client: Client;
   onClick: () => void;
+  deleteMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: () => void;
 }
 
-function ClientRow({ client, onClick }: ClientRowProps) {
+function ClientRow({
+  client,
+  onClick,
+  deleteMode,
+  isSelected,
+  onToggleSelect,
+}: ClientRowProps) {
   const initials =
     `${client.first_name?.charAt(0) ?? ""}${client.last_name?.charAt(0) ?? ""}`.toUpperCase() ||
     "?";
 
+  const handleClick = () => {
+    if (deleteMode && onToggleSelect) {
+      onToggleSelect();
+    } else {
+      onClick();
+    }
+  };
+
   return (
     <div
-      className="flex items-center gap-4 p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors cursor-pointer"
-      onClick={onClick}
+      className={`flex items-center gap-4 p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors cursor-pointer ${
+        isSelected ? "ring-2 ring-destructive bg-destructive/5" : ""
+      }`}
+      onClick={handleClick}
     >
+      {deleteMode && (
+        <Checkbox
+          checked={isSelected}
+          onCheckedChange={() => onToggleSelect?.()}
+          onClick={(e) => e.stopPropagation()}
+          className="shrink-0"
+        />
+      )}
       {/* Avatar */}
       <Avatar className="h-12 w-12 shrink-0">
         <AvatarFallback className="bg-primary/10 text-primary text-sm font-medium">

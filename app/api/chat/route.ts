@@ -180,6 +180,35 @@ export async function POST(
           accentColorState.value = accentColor;
         }
 
+        // Handle document creation - save to database immediately
+        if (
+          functionName === "create_document" &&
+          workingDocument &&
+          !workingDocument.id
+        ) {
+          try {
+            if (workingDocument.type === "quote") {
+              const dbResult = await createQuoteWithContent(
+                workingDocument.number,
+                workingDocument as unknown as Record<string, unknown>,
+              );
+              if (dbResult.success && dbResult.quote) {
+                workingDocument.id = dbResult.quote.id;
+              }
+            } else {
+              const dbResult = await createInvoiceWithContent(
+                workingDocument.number,
+                workingDocument as unknown as Record<string, unknown>,
+              );
+              if (dbResult.success && dbResult.invoice) {
+                workingDocument.id = dbResult.invoice.id;
+              }
+            }
+          } catch (error) {
+            console.error("Error creating document in database:", error);
+          }
+        }
+
         // Handle client creation when set_client is called
         if (functionName === "set_client" && workingDocument?.id) {
           const clientResult = await handleClientAssociation(
