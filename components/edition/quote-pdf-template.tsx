@@ -1,6 +1,13 @@
 "use client";
 
-import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
+import {
+  Document,
+  Page,
+  Text,
+  View,
+  StyleSheet,
+  Image,
+} from "@react-pdf/renderer";
 
 const colors = {
   text: "#1a1a1a",
@@ -40,9 +47,13 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "flex-start",
     marginBottom: 30,
   },
   logo: {
+    height: 50,
+  },
+  logoPlaceholder: {
     width: 100,
     height: 50,
     backgroundColor: colors.background,
@@ -260,6 +271,9 @@ interface QuoteData {
     phone: string;
     email: string;
     siret: string;
+    logoUrl?: string;
+    paymentTerms?: string;
+    legalNotice?: string;
   };
   client: {
     name?: string;
@@ -293,9 +307,14 @@ export function QuotePDFTemplate({ data, accentColor }: QuotePDFTemplateProps) {
       <Page size="A4" style={styles.page}>
         {/* Header */}
         <View style={styles.header}>
-          <View style={styles.logo}>
-            <Text style={styles.logoText}>LOGO</Text>
-          </View>
+          {data.company.logoUrl ? (
+            // eslint-disable-next-line jsx-a11y/alt-text
+            <Image src={data.company.logoUrl} style={styles.logo} />
+          ) : (
+            <View style={styles.logoPlaceholder}>
+              <Text style={styles.logoText}>LOGO</Text>
+            </View>
+          )}
           <View style={styles.headerRight}>
             <Text style={styles.title}>Devis n° {data.number}</Text>
             <Text style={styles.subtitle}>Réalisé le {data.date}</Text>
@@ -469,7 +488,11 @@ export function QuotePDFTemplate({ data, accentColor }: QuotePDFTemplateProps) {
           <View style={styles.footerContent}>
             <View style={styles.paymentConditions}>
               <Text style={styles.footerTitle}>Conditions de paiement</Text>
-              <Text style={styles.footerText}>{data.paymentConditions}</Text>
+              <Text style={styles.footerText}>
+                {data.company.paymentTerms ||
+                  data.paymentConditions ||
+                  "Aucune"}
+              </Text>
             </View>
             <View style={styles.signature}>
               <Text style={styles.signatureText}>Lu et approuvé</Text>
@@ -479,8 +502,7 @@ export function QuotePDFTemplate({ data, accentColor }: QuotePDFTemplateProps) {
             </View>
           </View>
           <Text style={styles.legalNotice}>
-            Mentions légales - TVA non applicable, art. 293 B du CGI (si
-            applicable)
+            {data.company.legalNotice || "Aucune mention légale"}
           </Text>
         </View>
       </Page>

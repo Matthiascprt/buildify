@@ -63,6 +63,13 @@ export default async function EditionPage({ searchParams }: EditionPageProps) {
             id: quote.id,
             number: quote.quote_number || content.number || "",
             client: clientData,
+            company: {
+              ...content.company,
+              // Always use current company data for protected fields (even if null)
+              logoUrl: company?.logo_url ?? undefined,
+              paymentTerms: company?.payment_terms ?? undefined,
+              legalNotice: company?.legal_notice ?? undefined,
+            },
           };
           initialAccentColor = quote.color || null;
         }
@@ -91,6 +98,13 @@ export default async function EditionPage({ searchParams }: EditionPageProps) {
             id: invoice.id,
             number: invoice.invoice_number || content.number || "",
             client: clientData,
+            company: {
+              ...content.company,
+              // Always use current company data for protected fields (even if null)
+              logoUrl: company?.logo_url ?? undefined,
+              paymentTerms: company?.payment_terms ?? undefined,
+              legalNotice: company?.legal_notice ?? undefined,
+            },
           };
           initialAccentColor = invoice.color || null;
         }

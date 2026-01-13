@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { Send, Mic, UserPlus, Plus } from "lucide-react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { Send, Mic, MicOff, UserPlus, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -28,6 +28,7 @@ interface ChatProps {
   nextInvoiceNumber: string;
   isEditingExisting?: boolean;
   onAccentColorChange?: (color: string | null) => void;
+  onClientCreated?: (client: Client) => void;
 }
 
 export function Chat({
@@ -40,6 +41,7 @@ export function Chat({
   nextInvoiceNumber,
   isEditingExisting: initialIsEditingExisting = false,
   onAccentColorChange,
+  onClientCreated,
 }: ChatProps) {
   const [isEditingExisting, setIsEditingExisting] = useState(
     initialIsEditingExisting,
@@ -66,7 +68,77 @@ export function Chat({
   const [showNewClientModal, setShowNewClientModal] = useState(false);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
+
+  // Speech recognition setup
+  const startRecording = useCallback(() => {
+    if (
+      !("webkitSpeechRecognition" in window) &&
+      !("SpeechRecognition" in window)
+    ) {
+      alert(
+        "La reconnaissance vocale n'est pas supportée par votre navigateur.",
+      );
+      return;
+    }
+
+    const SpeechRecognitionAPI =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SpeechRecognitionAPI();
+
+    recognition.lang = "fr-FR";
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
+    recognition.onstart = () => {
+      setIsRecording(true);
+    };
+
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      let finalTranscript = "";
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        if (event.results[i].isFinal) {
+          finalTranscript += event.results[i][0].transcript;
+        }
+      }
+
+      // Append to existing input
+      if (finalTranscript) {
+        setInput((prev) => prev + (prev ? " " : "") + finalTranscript);
+      }
+    };
+
+    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+      console.error("Speech recognition error:", event.error);
+      setIsRecording(false);
+    };
+
+    recognition.onend = () => {
+      setIsRecording(false);
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+  }, []);
+
+  const stopRecording = useCallback(() => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
+    }
+    setIsRecording(false);
+  }, []);
+
+  const toggleRecording = useCallback(() => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  }, [isRecording, startRecording, stopRecording]);
 
   // Show client picker button when document exists and no client is linked
   const shouldShowClientButton =
@@ -158,6 +230,11 @@ export function Chat({
         // Handle accent color change from AI
         if (data.accentColor !== undefined && onAccentColorChange) {
           onAccentColorChange(data.accentColor);
+        }
+
+        // Handle new client created by AI
+        if (data.newClient && onClientCreated) {
+          onClientCreated(data.newClient);
         }
       } else {
         const errorMessage: Message = {
@@ -264,6 +341,8 @@ export function Chat({
       email: company?.email || "",
       siret: company?.siret || "",
       logoUrl: company?.logo_url || undefined,
+      paymentTerms: company?.payment_terms || undefined,
+      legalNotice: company?.legal_notice || undefined,
     };
 
     const defaultTvaRate = company?.vat_rate ?? 20;
@@ -351,7 +430,12 @@ export function Chat({
       <NewClientModal
         isOpen={showNewClientModal}
         onClose={() => setShowNewClientModal(false)}
-        onClientCreated={handleClientSelect}
+        onClientCreated={(client) => {
+          // Add to clients list for future AI interactions
+          onClientCreated?.(client);
+          // Also handle client selection for the current document
+          handleClientSelect(client);
+        }}
       />
       <div className="border-b px-4 py-3">
         <div className="flex items-center gap-3">
@@ -496,11 +580,16 @@ export function Chat({
         <div className="flex gap-2">
           <Button
             type="button"
-            variant="outline"
+            variant={isRecording ? "destructive" : "outline"}
             size="icon"
-            className="shrink-0"
+            className={cn("shrink-0", isRecording && "animate-pulse")}
+            onClick={toggleRecording}
           >
-            <Mic className="h-4 w-4" />
+            {isRecording ? (
+              <MicOff className="h-4 w-4" />
+            ) : (
+              <Mic className="h-4 w-4" />
+            )}
           </Button>
           <Textarea
             value={input}

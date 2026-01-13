@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { Chat } from "@/components/edition/chat";
 import { DocumentPreview } from "@/components/edition/document-preview";
 import {
@@ -17,60 +17,9 @@ import {
   calculateTotals,
   calculateLineTotal,
   convertQuoteToInvoice,
+  recalculateSectionTotals,
 } from "@/lib/types/document";
 import type { Company, Client } from "@/lib/supabase/types";
-
-function recalculateSectionTotals(items: LineItem[]): LineItem[] {
-  const result: LineItem[] = [];
-  let currentSectionIndex = -1;
-
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i];
-    if (item.isSection) {
-      if (currentSectionIndex >= 0) {
-        let sectionTotal = 0;
-        let sectionTotalTTC = 0;
-        for (let j = currentSectionIndex + 1; j < i; j++) {
-          if (!items[j].isSection) {
-            const lineTotal = items[j].total || 0;
-            const lineTva = items[j].tva || 0;
-            sectionTotal += lineTotal;
-            sectionTotalTTC += lineTotal * (1 + lineTva / 100);
-          }
-        }
-        result[currentSectionIndex] = {
-          ...result[currentSectionIndex],
-          sectionTotal,
-          sectionTotalTTC: Math.round(sectionTotalTTC * 100) / 100,
-        };
-      }
-      result.push({ ...item });
-      currentSectionIndex = result.length - 1;
-    } else {
-      result.push({ ...item });
-    }
-  }
-
-  if (currentSectionIndex >= 0) {
-    let sectionTotal = 0;
-    let sectionTotalTTC = 0;
-    for (let j = currentSectionIndex + 1; j < result.length; j++) {
-      if (!result[j].isSection) {
-        const lineTotal = result[j].total || 0;
-        const lineTva = result[j].tva || 0;
-        sectionTotal += lineTotal;
-        sectionTotalTTC += lineTotal * (1 + lineTva / 100);
-      }
-    }
-    result[currentSectionIndex] = {
-      ...result[currentSectionIndex],
-      sectionTotal,
-      sectionTotalTTC: Math.round(sectionTotalTTC * 100) / 100,
-    };
-  }
-
-  return result;
-}
 
 interface EditionClientProps {
   userInitial: string;
@@ -85,7 +34,7 @@ interface EditionClientProps {
 export function EditionClient({
   userInitial,
   company,
-  clients,
+  clients: initialClients,
   initialNextQuoteNumber,
   initialNextInvoiceNumber,
   initialDocument = null,
@@ -94,6 +43,7 @@ export function EditionClient({
   const [document, setDocument] = useState<DocumentData | null>(
     initialDocument,
   );
+  const [clients, setClients] = useState<Client[]>(initialClients);
   const [nextQuoteNumber, setNextQuoteNumber] = useState(
     initialNextQuoteNumber,
   );
@@ -103,12 +53,132 @@ export function EditionClient({
   const [accentColor, setAccentColor] = useState<string | null>(
     initialAccentColor,
   );
+  const [clientSyncError, setClientSyncError] = useState<string | null>(null);
 
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const previousClientNameRef = useRef<string | undefined>(
-    initialDocument?.client?.name,
-  );
+  const previousClientRef = useRef<{
+    name?: string;
+    phone?: string;
+    email?: string;
+  }>({
+    name: initialDocument?.client?.name,
+    phone: initialDocument?.client?.phone,
+    email: initialDocument?.client?.email,
+  });
+
+  // Sync client when name, phone or email changes in document
+  useEffect(() => {
+    if (!document?.id || !document?.client) return;
+
+    const currentClient = document.client;
+    const prevClient = previousClientRef.current;
+
+    // Check what changed
+    const nameChanged = currentClient.name !== prevClient.name;
+    const phoneChanged = currentClient.phone !== prevClient.phone;
+    const emailChanged = currentClient.email !== prevClient.email;
+
+    if (!nameChanged && !phoneChanged && !emailChanged) return;
+
+    // Clear previous timeout
+    if (syncTimeoutRef.current) {
+      clearTimeout(syncTimeoutRef.current);
+    }
+
+    // Store what field changed for potential rollback
+    const changedField = nameChanged
+      ? "name"
+      : phoneChanged
+        ? "phone"
+        : "email";
+    const previousValue = prevClient[changedField];
+
+    syncTimeoutRef.current = setTimeout(async () => {
+      const result = await syncClientFromDocument(
+        document.type,
+        document.id!,
+        currentClient.id,
+        {
+          name: currentClient.name,
+          phone: currentClient.phone,
+          email: currentClient.email,
+        },
+        prevClient.name,
+      );
+
+      if (result.success && result.client) {
+        setClientSyncError(null);
+        // Update the client ID and auto-fill phone/email when client is associated
+        if (result.action === "created" || result.action === "associated") {
+          setDocument((prev) => {
+            if (!prev) return prev;
+            const clientUpdate: typeof prev.client = {
+              ...prev.client,
+              id: result.client!.id,
+            };
+
+            if (result.action === "associated") {
+              // Client reconnu → remplir avec ses infos
+              const fullName = [
+                result.client!.first_name,
+                result.client!.last_name,
+              ]
+                .filter(Boolean)
+                .join(" ");
+              clientUpdate.phone = result.client!.phone || "";
+              clientUpdate.email = result.client!.email || "";
+              if (fullName) {
+                clientUpdate.name = fullName;
+              }
+            } else if (result.action === "created") {
+              // Nouveau client (nom non reconnu) → vider téléphone et email
+              clientUpdate.phone = "";
+              clientUpdate.email = "";
+            }
+
+            // Update ref with new values
+            previousClientRef.current = {
+              name: clientUpdate.name,
+              phone: clientUpdate.phone,
+              email: clientUpdate.email,
+            };
+
+            return {
+              ...prev,
+              client: clientUpdate,
+            };
+          });
+        } else {
+          // Update ref with current values (for "updated" or "none" action)
+          previousClientRef.current = {
+            name: currentClient.name,
+            phone: currentClient.phone,
+            email: currentClient.email,
+          };
+        }
+      } else if (!result.success && result.error) {
+        // Show error for duplicate email/phone and restore previous value
+        setClientSyncError(result.error);
+        setDocument((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            client: {
+              ...prev.client,
+              [changedField]: previousValue,
+            },
+          };
+        });
+      }
+    }, 500);
+
+    return () => {
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current);
+      }
+    };
+  }, [document?.id, document?.type, document?.client]);
 
   const saveToDatabase = useCallback(async (doc: DocumentData) => {
     if (!doc.id) return;
@@ -125,6 +195,16 @@ export function EditionClient({
 
   const handleDocumentChange = useCallback(
     (newDocument: DocumentData | null) => {
+      // When document comes from AI with a linked client, update previousClientRef
+      // to prevent triggering unnecessary client sync
+      if (newDocument?.client?.id) {
+        previousClientRef.current = {
+          name: newDocument.client.name,
+          phone: newDocument.client.phone,
+          email: newDocument.client.email,
+        };
+      }
+
       setDocument(newDocument);
 
       // Save to database when AI updates the document
@@ -184,6 +264,29 @@ export function EditionClient({
     (path: string, value: string | number) => {
       if (!document) return;
 
+      // Champs protégés - modifiables uniquement via Paramètres
+      const protectedPaths = [
+        "number",
+        "date",
+        "company.name",
+        "company.address",
+        "company.city",
+        "company.phone",
+        "company.email",
+        "company.siret",
+        "company.logoUrl",
+        "company.paymentTerms",
+        "company.legalNotice",
+        "paymentConditions",
+      ];
+
+      if (protectedPaths.includes(path) || path.startsWith("company.")) {
+        console.warn(
+          `Tentative de modification d'un champ protégé: ${path}. Utilisez les Paramètres.`,
+        );
+        return;
+      }
+
       setDocument((prev) => {
         if (!prev) return prev;
 
@@ -230,80 +333,8 @@ export function EditionClient({
           updated.totalHT = totals.totalHT;
           updated.tvaAmount = totals.tvaAmount;
           updated.totalTTC = totals.totalTTC;
-        } else if (parts[0] === "company" && parts.length === 2) {
-          updated.company = { ...prev.company, [parts[1]]: value };
         } else if (parts[0] === "client" && parts.length === 2) {
           updated.client = { ...prev.client, [parts[1]]: value };
-
-          // Sync client when name, phone or email changes
-          if (
-            updated.id &&
-            (parts[1] === "name" ||
-              parts[1] === "phone" ||
-              parts[1] === "email")
-          ) {
-            if (syncTimeoutRef.current) {
-              clearTimeout(syncTimeoutRef.current);
-            }
-            syncTimeoutRef.current = setTimeout(async () => {
-              const result = await syncClientFromDocument(
-                updated.type,
-                updated.id!,
-                updated.client.id,
-                {
-                  name: updated.client.name,
-                  phone: updated.client.phone,
-                  email: updated.client.email,
-                },
-                previousClientNameRef.current,
-              );
-
-              if (result.success && result.client) {
-                // Update the client ID and auto-fill phone/email when client is associated
-                if (
-                  result.action === "created" ||
-                  result.action === "associated"
-                ) {
-                  setDocument((prev) => {
-                    if (!prev) return prev;
-                    const clientUpdate: typeof prev.client = {
-                      ...prev.client,
-                      id: result.client!.id,
-                    };
-
-                    if (result.action === "associated") {
-                      // Client reconnu → remplir avec ses infos
-                      const fullName = [
-                        result.client!.first_name,
-                        result.client!.last_name,
-                      ]
-                        .filter(Boolean)
-                        .join(" ");
-                      clientUpdate.phone = result.client!.phone || "";
-                      clientUpdate.email = result.client!.email || "";
-                      if (fullName) {
-                        clientUpdate.name = fullName;
-                      }
-                    } else if (result.action === "created") {
-                      // Nouveau client (nom non reconnu) → vider téléphone et email
-                      clientUpdate.phone = "";
-                      clientUpdate.email = "";
-                    }
-
-                    const updatedDoc = {
-                      ...prev,
-                      client: clientUpdate,
-                    };
-                    // Save to database after auto-fill/clear
-                    saveToDatabase(updatedDoc);
-                    return updatedDoc;
-                  });
-                }
-                // Update previous name reference
-                previousClientNameRef.current = updated.client.name;
-              }
-            }, 500);
-          }
         } else if (path === "tvaRate" || path === "deposit") {
           (updated as Record<string, unknown>)[path] = value;
           const totals = calculateTotals(
@@ -489,6 +520,17 @@ export function EditionClient({
     [document, saveToDatabase],
   );
 
+  // Callback to add a new client to the list (called when AI or modal creates a client)
+  const handleClientCreated = useCallback((newClient: Client) => {
+    setClients((prev) => {
+      // Avoid duplicates
+      if (prev.some((c) => c.id === newClient.id)) {
+        return prev;
+      }
+      return [...prev, newClient];
+    });
+  }, []);
+
   return (
     <div className="grid h-full grid-cols-1 lg:grid-cols-2 overflow-hidden">
       <div className="border-r h-full overflow-hidden">
@@ -502,6 +544,7 @@ export function EditionClient({
           nextInvoiceNumber={nextInvoiceNumber}
           isEditingExisting={!!initialDocument}
           onAccentColorChange={handleAccentColorChange}
+          onClientCreated={handleClientCreated}
         />
       </div>
       <div className="hidden lg:block h-full overflow-hidden">
@@ -514,6 +557,8 @@ export function EditionClient({
           onRemoveLine={handleRemoveLine}
           accentColor={accentColor}
           onAccentColorChange={handleAccentColorChange}
+          clientSyncError={clientSyncError}
+          onClientSyncErrorClear={() => setClientSyncError(null)}
         />
       </div>
     </div>

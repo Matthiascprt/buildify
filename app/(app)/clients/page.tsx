@@ -100,6 +100,7 @@ export default function ClientsPage() {
     phone: "",
     type: "particulier" as ClientType,
   });
+  const [editErrorMessage, setEditErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadClients() {
@@ -120,6 +121,7 @@ export default function ClientsPage() {
       phone: client.phone ?? "",
       type: (client.type as ClientType) ?? "particulier",
     });
+    setEditErrorMessage(null);
   };
 
   const filteredAndSortedClients = useMemo(() => {
@@ -196,8 +198,11 @@ export default function ClientsPage() {
           prev.map((c) => (c.id === selectedClient.id ? result.client! : c)),
         );
         setSelectedClient(result.client);
+        setEditErrorMessage(null);
       } else {
-        console.error("Error updating client:", result.error);
+        setEditErrorMessage(
+          result.error || "Erreur lors de la modification du client",
+        );
       }
     });
   };
@@ -574,152 +579,165 @@ export default function ClientsPage() {
         onOpenChange={(open) => !open && setSelectedClient(null)}
       >
         <DialogContent
-          className="max-w-2xl max-h-[90vh] overflow-y-auto"
+          className="max-w-2xl max-h-[90vh] flex flex-col overflow-hidden p-0"
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
           {selectedClient && (
             <>
-              <DialogHeader className="pr-8">
-                <DialogTitle className="flex items-center gap-3">
-                  <Avatar className="h-11 w-11">
-                    <AvatarFallback className="bg-primary/10 text-primary text-sm">
-                      {`${selectedClient.first_name?.charAt(0) ?? ""}${selectedClient.last_name?.charAt(0) ?? ""}`.toUpperCase() ||
-                        "?"}
-                    </AvatarFallback>
-                  </Avatar>
-                  <span>
-                    {selectedClient.first_name} {selectedClient.last_name}
-                  </span>
-                </DialogTitle>
-                <DialogDescription>
+              {/* Fixed Header */}
+              <div className="shrink-0 px-6 pt-6 pb-4 border-b">
+                <DialogHeader className="pr-8">
+                  <DialogTitle className="flex items-center gap-3">
+                    <Avatar className="h-11 w-11">
+                      <AvatarFallback className="bg-primary/10 text-primary text-sm">
+                        {`${selectedClient.first_name?.charAt(0) ?? ""}${selectedClient.last_name?.charAt(0) ?? ""}`.toUpperCase() ||
+                          "?"}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span>
+                      {selectedClient.first_name} {selectedClient.last_name}
+                    </span>
+                  </DialogTitle>
+                </DialogHeader>
+              </div>
+
+              {/* Scrollable Content */}
+              <div className="flex-1 overflow-y-auto px-6 py-4 min-h-0">
+                <p className="text-sm text-muted-foreground mb-4">
                   Modifiez les informations du client
-                </DialogDescription>
-              </DialogHeader>
-
-              {/* Edit Form */}
-              <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="edit_last_name">Nom</Label>
-                    <Input
-                      id="edit_last_name"
-                      placeholder="Dupont"
-                      value={editFormData.last_name}
-                      onChange={(e) =>
-                        setEditFormData({
-                          ...editFormData,
-                          last_name: e.target.value,
-                        })
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="edit_first_name">Prénom</Label>
-                    <Input
-                      id="edit_first_name"
-                      placeholder="Jean"
-                      value={editFormData.first_name}
-                      onChange={(e) =>
-                        setEditFormData({
-                          ...editFormData,
-                          first_name: e.target.value,
-                        })
-                      }
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit_email">Email</Label>
-                  <Input
-                    id="edit_email"
-                    type="email"
-                    placeholder="jean.dupont@example.com"
-                    value={editFormData.email}
-                    onChange={(e) =>
-                      setEditFormData({
-                        ...editFormData,
-                        email: e.target.value,
-                      })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit_phone">Téléphone</Label>
-                  <Input
-                    id="edit_phone"
-                    type="tel"
-                    placeholder="06 12 34 56 78"
-                    value={editFormData.phone}
-                    onChange={(e) =>
-                      setEditFormData({
-                        ...editFormData,
-                        phone: e.target.value,
-                      })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit_type">Type</Label>
-                  <Select
-                    value={editFormData.type}
-                    onValueChange={(value) =>
-                      setEditFormData({
-                        ...editFormData,
-                        type: value as ClientType,
-                      })
-                    }
-                  >
-                    <SelectTrigger id="edit_type" className="w-full">
-                      <SelectValue placeholder="Sélectionner un type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="particulier">Particulier</SelectItem>
-                      <SelectItem value="professionnel">
-                        Professionnel
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="flex justify-end">
-                <Button onClick={handleUpdateClient} disabled={isPending}>
-                  {isPending && (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  )}
-                  Enregistrer les modifications
-                </Button>
-              </div>
-
-              <Separator className="my-4" />
-
-              {/* Documents Section */}
-              <div className="space-y-4">
-                <h3 className="font-semibold">Documents</h3>
-                <ClientDocuments clientId={selectedClient.id} />
-              </div>
-
-              <Separator className="my-4" />
-
-              {/* Danger Zone */}
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-muted-foreground">
-                  Supprimer ce client
                 </p>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                  onClick={handleDeleteClient}
-                  disabled={isPending}
-                >
-                  {isPending ? (
-                    <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
-                  ) : (
-                    <Trash2 className="h-4 w-4 mr-1.5" />
+
+                {/* Edit Form */}
+                <div className="grid gap-4">
+                  {editErrorMessage && (
+                    <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-600 dark:text-amber-400">
+                      <AlertTriangle className="h-4 w-4 shrink-0" />
+                      <span className="text-sm">{editErrorMessage}</span>
+                    </div>
                   )}
-                  Supprimer
-                </Button>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="edit_last_name">Nom</Label>
+                      <Input
+                        id="edit_last_name"
+                        placeholder="Dupont"
+                        value={editFormData.last_name}
+                        onChange={(e) =>
+                          setEditFormData({
+                            ...editFormData,
+                            last_name: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit_first_name">Prénom</Label>
+                      <Input
+                        id="edit_first_name"
+                        placeholder="Jean"
+                        value={editFormData.first_name}
+                        onChange={(e) =>
+                          setEditFormData({
+                            ...editFormData,
+                            first_name: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit_email">Email</Label>
+                    <Input
+                      id="edit_email"
+                      type="email"
+                      placeholder="jean.dupont@example.com"
+                      value={editFormData.email}
+                      onChange={(e) =>
+                        setEditFormData({
+                          ...editFormData,
+                          email: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit_phone">Téléphone</Label>
+                    <Input
+                      id="edit_phone"
+                      type="tel"
+                      placeholder="06 12 34 56 78"
+                      value={editFormData.phone}
+                      onChange={(e) =>
+                        setEditFormData({
+                          ...editFormData,
+                          phone: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit_type">Type</Label>
+                    <Select
+                      value={editFormData.type}
+                      onValueChange={(value) =>
+                        setEditFormData({
+                          ...editFormData,
+                          type: value as ClientType,
+                        })
+                      }
+                    >
+                      <SelectTrigger id="edit_type" className="w-full">
+                        <SelectValue placeholder="Sélectionner un type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="particulier">Particulier</SelectItem>
+                        <SelectItem value="professionnel">
+                          Professionnel
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="flex justify-end mt-4">
+                  <Button onClick={handleUpdateClient} disabled={isPending}>
+                    {isPending && (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    )}
+                    Enregistrer les modifications
+                  </Button>
+                </div>
+
+                <Separator className="my-4" />
+
+                {/* Documents Section */}
+                <div className="space-y-4">
+                  <h3 className="font-semibold">Documents</h3>
+                  <ClientDocuments clientId={selectedClient.id} />
+                </div>
+              </div>
+
+              {/* Fixed Footer */}
+              <div className="shrink-0 px-6 py-4 border-t">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-muted-foreground">
+                    Supprimer ce client
+                  </p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                    onClick={handleDeleteClient}
+                    disabled={isPending}
+                  >
+                    {isPending ? (
+                      <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4 mr-1.5" />
+                    )}
+                    Supprimer
+                  </Button>
+                </div>
               </div>
             </>
           )}

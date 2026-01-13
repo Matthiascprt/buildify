@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import Image from "next/image";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -12,6 +13,7 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -35,8 +37,18 @@ import {
   getSettingsData,
   updateProfile,
   updateCompany,
+  updateCompanyLogoUrl,
+  getLogoUploadInfo,
 } from "@/lib/supabase/api";
-import { Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
+import {
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+  Upload,
+  X,
+  ImageIcon,
+} from "lucide-react";
 
 const settingsSchema = z.object({
   firstName: z.string().optional(),
@@ -48,6 +60,8 @@ const settingsSchema = z.object({
   email: z.string().email("Email invalide").optional().or(z.literal("")),
   vatRate: z.number().min(0).max(100).optional(),
   legalStatus: z.string().optional(),
+  paymentTerms: z.string().optional(),
+  legalNotice: z.string().optional(),
 });
 
 type SettingsFormValues = z.infer<typeof settingsSchema>;
@@ -59,6 +73,8 @@ export default function SettingsPage() {
     type: "success" | "error";
     text: string;
   } | null>(null);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
 
   const form = useForm<SettingsFormValues>({
     resolver: zodResolver(settingsSchema),
@@ -72,6 +88,8 @@ export default function SettingsPage() {
       email: "",
       vatRate: 20,
       legalStatus: "",
+      paymentTerms: "",
+      legalNotice: "",
     },
   });
 
@@ -90,7 +108,14 @@ export default function SettingsPage() {
           email: company?.email ?? profile?.email ?? "",
           vatRate: company?.vat_rate ?? 20,
           legalStatus: company?.legal_status ?? "",
+          paymentTerms: company?.payment_terms ?? "",
+          legalNotice: company?.legal_notice ?? "",
         });
+
+        // Load logo URL
+        if (company?.logo_url) {
+          setLogoUrl(company.logo_url);
+        }
       } catch (error) {
         console.error("Error loading settings:", error);
         setMessage({
@@ -104,6 +129,114 @@ export default function SettingsPage() {
 
     loadData();
   }, [form]);
+
+  async function handleLogoUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type (only JPG and PNG)
+    const allowedTypes = ["image/jpeg", "image/png"];
+    if (!allowedTypes.includes(file.type)) {
+      setMessage({
+        type: "error",
+        text: "Format accepté : JPG ou PNG uniquement",
+      });
+      return;
+    }
+
+    // Validate file size (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      setMessage({ type: "error", text: "L'image ne doit pas dépasser 2 Mo" });
+      return;
+    }
+
+    setIsUploadingLogo(true);
+    setMessage(null);
+
+    try {
+      // Get user info for filename
+      const uploadInfo = await getLogoUploadInfo();
+      if (!uploadInfo.success || !uploadInfo.userId) {
+        setMessage({
+          type: "error",
+          text: uploadInfo.error || "Erreur d'authentification",
+        });
+        setIsUploadingLogo(false);
+        return;
+      }
+
+      // Upload using browser client
+      const supabase = createClient();
+      const fileExt = file.name.split(".").pop();
+      const fileName = `${uploadInfo.userId}-${Date.now()}.${fileExt}`;
+      const filePath = `Logo clients/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("client-uploads")
+        .upload(filePath, file, {
+          cacheControl: "3600",
+          upsert: true,
+        });
+
+      if (uploadError) {
+        console.error("Error uploading logo:", uploadError);
+        setMessage({
+          type: "error",
+          text: uploadError.message || "Erreur lors de l'upload",
+        });
+        setIsUploadingLogo(false);
+        return;
+      }
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from("client-uploads")
+        .getPublicUrl(filePath);
+
+      const newLogoUrl = urlData.publicUrl;
+
+      // Update company with logo URL via server action
+      const updateResult = await updateCompanyLogoUrl(newLogoUrl);
+      if (!updateResult.success) {
+        setMessage({
+          type: "error",
+          text: updateResult.error || "Erreur lors de la sauvegarde",
+        });
+        setIsUploadingLogo(false);
+        return;
+      }
+
+      setLogoUrl(newLogoUrl);
+      setMessage({ type: "success", text: "Logo uploadé avec succès" });
+    } catch (error) {
+      console.error("Error uploading logo:", error);
+      setMessage({
+        type: "error",
+        text: "Erreur inattendue lors de l'upload",
+      });
+    }
+
+    setIsUploadingLogo(false);
+  }
+
+  async function handleLogoDelete() {
+    setIsUploadingLogo(true);
+    setMessage(null);
+
+    const result = await updateCompanyLogoUrl(null);
+
+    if (result.success) {
+      setLogoUrl(null);
+      setMessage({ type: "success", text: "Logo supprimé avec succès" });
+    } else {
+      setMessage({
+        type: "error",
+        text: result.error || "Erreur lors de la suppression du logo",
+      });
+    }
+
+    setIsUploadingLogo(false);
+  }
 
   function onSubmit(data: SettingsFormValues) {
     startTransition(async () => {
@@ -124,6 +257,8 @@ export default function SettingsPage() {
           email: data.email || null,
           vat_rate: data.vatRate ?? null,
           legal_status: data.legalStatus || null,
+          payment_terms: data.paymentTerms || null,
+          legal_notice: data.legalNotice || null,
         }),
       ]);
 
@@ -216,6 +351,71 @@ export default function SettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Logo Upload Section */}
+              <div className="space-y-4 pb-2">
+                <div>
+                  <label className="text-sm font-medium">
+                    Logo de l&apos;entreprise
+                  </label>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Ce logo apparaîtra sur vos devis et factures
+                  </p>
+                </div>
+                <div className="flex flex-col items-center gap-4 p-6 border-2 border-dashed rounded-xl bg-muted/30 max-w-xs">
+                  {logoUrl ? (
+                    <div className="relative">
+                      <Image
+                        src={logoUrl}
+                        alt="Logo entreprise"
+                        width={200}
+                        height={100}
+                        className="w-48 h-24 object-contain border rounded-lg bg-background p-2"
+                        unoptimized
+                      />
+                      <button
+                        type="button"
+                        onClick={handleLogoDelete}
+                        disabled={isUploadingLogo}
+                        className="absolute -top-2 -right-2 bg-muted text-muted-foreground rounded-full p-1 hover:bg-muted-foreground/20 hover:text-foreground transition-colors"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="w-48 h-24 border-2 border-dashed rounded-lg flex items-center justify-center bg-muted/50">
+                      <ImageIcon className="h-10 w-10 text-muted-foreground/50" />
+                    </div>
+                  )}
+                  <label className="cursor-pointer w-full">
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png"
+                      onChange={handleLogoUpload}
+                      disabled={isUploadingLogo}
+                      className="hidden"
+                    />
+                    <div className="flex items-center justify-center gap-2 px-4 py-2.5 border rounded-lg hover:bg-muted transition-colors w-full">
+                      {isUploadingLogo ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Upload className="h-4 w-4" />
+                      )}
+                      <span className="text-sm font-medium">
+                        {isUploadingLogo
+                          ? "Upload en cours..."
+                          : logoUrl
+                            ? "Changer le logo"
+                            : "Choisir un fichier"}
+                      </span>
+                    </div>
+                  </label>
+                  <p className="text-xs text-muted-foreground">
+                    JPG ou PNG, max 2 Mo
+                  </p>
+                </div>
+              </div>
+
+              <Separator />
               <div className="grid gap-4 sm:grid-cols-2">
                 <FormField
                   control={form.control}
@@ -338,6 +538,52 @@ export default function SettingsPage() {
                   )}
                 />
               </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Documents</CardTitle>
+              <CardDescription>
+                Ces informations apparaîtront automatiquement sur vos devis et
+                factures.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <FormField
+                control={form.control}
+                name="paymentTerms"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Conditions de paiement</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Ex: Paiement à 30 jours, par virement bancaire sur le compte : FR76 XXXX XXXX..."
+                        className="min-h-[100px]"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="legalNotice"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Mentions légales</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Ex: TVA non applicable, art. 293 B du CGI / Assurance décennale : ..."
+                        className="min-h-[100px]"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </CardContent>
           </Card>
 

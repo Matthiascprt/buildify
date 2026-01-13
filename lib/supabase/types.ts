@@ -19,6 +19,8 @@ export type Company = {
   siret: string | null;
   vat_rate: number | null;
   logo_url: string | null;
+  payment_terms: string | null;
+  legal_notice: string | null;
 };
 
 export type Client = {
@@ -50,7 +52,6 @@ export type Quote = {
   quote_number: string | null;
   valid_until: string | null;
   content: Record<string, unknown> | null;
-  payment_terms: string | null;
   color: string | null;
 };
 
@@ -62,7 +63,6 @@ export type Invoice = {
   invoice_number: string | null;
   due_date: string | null;
   content: Record<string, unknown> | null;
-  payment_terms: string | null;
   color: string | null;
 };
 

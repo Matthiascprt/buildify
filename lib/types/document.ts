@@ -19,6 +19,8 @@ export interface DocumentCompany {
   email: string;
   siret: string;
   logoUrl?: string;
+  paymentTerms?: string;
+  legalNotice?: string;
 }
 
 export interface DocumentClient {
@@ -141,22 +143,27 @@ export function calculateTotals(
   globalTvaRate: number,
   deposit: number = 0,
 ): { totalHT: number; tvaAmount: number; totalTTC: number } {
-  let totalHT = 0;
-  let tvaAmount = 0;
+  let totalHTCents = 0;
+  let tvaTotalCents = 0;
 
   for (const item of items) {
     if (item.isSection) continue;
     const lineTotal = item.total || 0;
     const lineTvaRate = item.tva ?? globalTvaRate;
-    totalHT += lineTotal;
-    tvaAmount += Math.round(lineTotal * (lineTvaRate / 100) * 100) / 100;
+    const lineTotalCents = Math.round(lineTotal * 100);
+    totalHTCents += lineTotalCents;
+    tvaTotalCents += Math.round(lineTotalCents * lineTvaRate) / 100;
   }
 
-  totalHT = Math.round(totalHT * 100) / 100;
-  tvaAmount = Math.round(tvaAmount * 100) / 100;
-  const totalTTC = Math.round((totalHT + tvaAmount - deposit) * 100) / 100;
+  tvaTotalCents = Math.round(tvaTotalCents);
+  const depositCents = Math.round(deposit * 100);
+  const totalTTCCents = totalHTCents + tvaTotalCents - depositCents;
 
-  return { totalHT, tvaAmount, totalTTC };
+  return {
+    totalHT: totalHTCents / 100,
+    tvaAmount: tvaTotalCents / 100,
+    totalTTC: totalTTCCents / 100,
+  };
 }
 
 export function calculateLineTotal(
@@ -164,6 +171,60 @@ export function calculateLineTotal(
   unitPrice: number,
 ): number {
   return Math.round(quantity * unitPrice * 100) / 100;
+}
+
+export function recalculateSectionTotals(items: LineItem[]): LineItem[] {
+  const result: LineItem[] = [];
+  let currentSectionIndex = -1;
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (item.isSection) {
+      if (currentSectionIndex >= 0) {
+        let sectionTotal = 0;
+        let sectionTotalTTC = 0;
+        for (let j = currentSectionIndex + 1; j < i; j++) {
+          if (!items[j].isSection) {
+            const lineTotal = items[j].total || 0;
+            const lineTva = items[j].tva || 0;
+            sectionTotal += lineTotal;
+            sectionTotalTTC +=
+              Math.round(lineTotal * (1 + lineTva / 100) * 100) / 100;
+          }
+        }
+        result[currentSectionIndex] = {
+          ...result[currentSectionIndex],
+          sectionTotal: Math.round(sectionTotal * 100) / 100,
+          sectionTotalTTC: Math.round(sectionTotalTTC * 100) / 100,
+        };
+      }
+      result.push({ ...item });
+      currentSectionIndex = result.length - 1;
+    } else {
+      result.push({ ...item });
+    }
+  }
+
+  if (currentSectionIndex >= 0) {
+    let sectionTotal = 0;
+    let sectionTotalTTC = 0;
+    for (let j = currentSectionIndex + 1; j < result.length; j++) {
+      if (!result[j].isSection) {
+        const lineTotal = result[j].total || 0;
+        const lineTva = result[j].tva || 0;
+        sectionTotal += lineTotal;
+        sectionTotalTTC +=
+          Math.round(lineTotal * (1 + lineTva / 100) * 100) / 100;
+      }
+    }
+    result[currentSectionIndex] = {
+      ...result[currentSectionIndex],
+      sectionTotal: Math.round(sectionTotal * 100) / 100,
+      sectionTotalTTC: Math.round(sectionTotalTTC * 100) / 100,
+    };
+  }
+
+  return result;
 }
 
 export function convertQuoteToInvoice(

@@ -11,6 +11,7 @@ import {
   Plus,
   Minus,
   Palette,
+  AlertTriangle,
 } from "lucide-react";
 import { HexColorPicker } from "react-colorful";
 import { pdf } from "@react-pdf/renderer";
@@ -58,6 +59,8 @@ interface DocumentPreviewProps {
   onRemoveLine?: (lineIndex: number) => void;
   accentColor?: string | null;
   onAccentColorChange?: (color: string | null) => void;
+  clientSyncError?: string | null;
+  onClientSyncErrorClear?: () => void;
 }
 
 function mapToQuoteTemplateData(doc: QuoteData) {
@@ -72,6 +75,9 @@ function mapToQuoteTemplateData(doc: QuoteData) {
       phone: doc.company.phone,
       email: doc.company.email,
       siret: doc.company.siret,
+      logoUrl: doc.company.logoUrl,
+      paymentTerms: doc.company.paymentTerms,
+      legalNotice: doc.company.legalNotice,
     },
     client: {
       name: doc.client.name,
@@ -104,6 +110,9 @@ function mapToInvoiceTemplateData(doc: InvoiceData) {
       phone: doc.company.phone,
       email: doc.company.email,
       siret: doc.company.siret,
+      logoUrl: doc.company.logoUrl,
+      paymentTerms: doc.company.paymentTerms,
+      legalNotice: doc.company.legalNotice,
     },
     client: {
       name: doc.client.name,
@@ -133,9 +142,10 @@ export function DocumentPreview({
   onRemoveLine,
   accentColor,
   onAccentColorChange,
+  clientSyncError,
+  onClientSyncErrorClear,
 }: DocumentPreviewProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [showDeleteSuccess, setShowDeleteSuccess] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showConvertConfirm, setShowConvertConfirm] = useState(false);
   const [isConverting, setIsConverting] = useState(false);
@@ -153,6 +163,7 @@ export function DocumentPreview({
     phone: "",
     type: "particulier" as ClientType,
   });
+  const [clientEditError, setClientEditError] = useState<string | null>(null);
   const documentRef = useRef<HTMLDivElement>(null);
   const colorPickerRef = useRef<HTMLDivElement>(null);
 
@@ -161,6 +172,7 @@ export function DocumentPreview({
 
     setShowClientSheet(true);
     setIsLoadingClient(true);
+    setClientEditError(null);
 
     try {
       const response = await fetch(`/api/clients/${document.client.id}`);
@@ -196,6 +208,11 @@ export function DocumentPreview({
 
     if (result.success && result.client) {
       setClientData(result.client);
+      setClientEditError(null);
+    } else {
+      setClientEditError(
+        result.error || "Erreur lors de la modification du client",
+      );
     }
     setIsSavingClient(false);
   };
@@ -248,12 +265,7 @@ export function DocumentPreview({
 
     if (result.success) {
       setShowDeleteConfirm(false);
-      setShowDeleteSuccess(true);
     }
-  };
-
-  const handleSuccessClose = () => {
-    setShowDeleteSuccess(false);
   };
 
   const handleConvertClick = () => {
@@ -435,11 +447,30 @@ export function DocumentPreview({
         </div>
       </div>
 
+      {clientSyncError && (
+        <div className="px-4 py-2 bg-amber-500/10 border-b border-amber-500/30">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span className="text-sm">{clientSyncError}</span>
+            </div>
+            {onClientSyncErrorClear && (
+              <button
+                onClick={onClientSyncErrorClear}
+                className="text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 text-sm font-medium"
+              >
+                Fermer
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="relative flex-1 min-h-0">
         <div className="absolute inset-0 overflow-y-auto">
           <div className="flex min-h-full items-center justify-center p-4">
             {document === null ? (
-              <div className="flex aspect-[210/297] w-full max-w-md flex-col items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/25 bg-background">
+              <div className="flex aspect-210/297 w-full max-w-md flex-col items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/25 bg-background">
                 <FileText className="h-16 w-16 text-muted-foreground/50" />
                 <p className="mt-4 text-lg font-medium text-muted-foreground">
                   Document A4
@@ -508,21 +539,6 @@ export function DocumentPreview({
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de succès */}
-      <Dialog open={showDeleteSuccess} onOpenChange={setShowDeleteSuccess}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Document supprimé</DialogTitle>
-            <DialogDescription>
-              Ce document a bien été supprimé.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button onClick={handleSuccessClose}>OK</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* Dialog de confirmation de conversion en facture */}
       <Dialog open={showConvertConfirm} onOpenChange={setShowConvertConfirm}>
         <DialogContent>
@@ -551,33 +567,33 @@ export function DocumentPreview({
       {/* Dialog fiche client */}
       <Dialog open={showClientSheet} onOpenChange={setShowClientSheet}>
         <DialogContent
-          className="max-w-2xl max-h-[90vh] overflow-y-auto"
+          className="max-w-2xl max-h-[90vh] flex flex-col overflow-hidden p-0"
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
-          <DialogHeader className="pr-8">
-            <DialogTitle className="flex items-center gap-3">
-              {isLoadingClient ? (
-                <span>Chargement...</span>
-              ) : clientData ? (
-                <>
-                  <Avatar className="h-11 w-11">
-                    <AvatarFallback className="bg-primary/10 text-primary text-sm">
-                      {`${clientData.first_name?.charAt(0) ?? ""}${clientData.last_name?.charAt(0) ?? ""}`.toUpperCase() ||
-                        "?"}
-                    </AvatarFallback>
-                  </Avatar>
-                  <span>
-                    {clientData.first_name} {clientData.last_name}
-                  </span>
-                </>
-              ) : (
-                <span>Client</span>
-              )}
-            </DialogTitle>
-            <DialogDescription>
-              Modifiez les informations du client
-            </DialogDescription>
-          </DialogHeader>
+          {/* Fixed Header */}
+          <div className="shrink-0 px-6 pt-6 pb-4 border-b">
+            <DialogHeader className="pr-8">
+              <DialogTitle className="flex items-center gap-3">
+                {isLoadingClient ? (
+                  <span>Chargement...</span>
+                ) : clientData ? (
+                  <>
+                    <Avatar className="h-11 w-11">
+                      <AvatarFallback className="bg-primary/10 text-primary text-sm">
+                        {`${clientData.first_name?.charAt(0) ?? ""}${clientData.last_name?.charAt(0) ?? ""}`.toUpperCase() ||
+                          "?"}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span>
+                      {clientData.first_name} {clientData.last_name}
+                    </span>
+                  </>
+                ) : (
+                  <span>Client</span>
+                )}
+              </DialogTitle>
+            </DialogHeader>
+          </div>
 
           {isLoadingClient ? (
             <div className="flex items-center justify-center py-12">
@@ -585,133 +601,149 @@ export function DocumentPreview({
             </div>
           ) : clientData ? (
             <>
-              {/* Edit Form */}
-              <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="edit_last_name">Nom</Label>
-                    <Input
-                      id="edit_last_name"
-                      placeholder="Dupont"
-                      value={editFormData.last_name}
-                      onChange={(e) =>
-                        setEditFormData({
-                          ...editFormData,
-                          last_name: e.target.value,
-                        })
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="edit_first_name">Prénom</Label>
-                    <Input
-                      id="edit_first_name"
-                      placeholder="Jean"
-                      value={editFormData.first_name}
-                      onChange={(e) =>
-                        setEditFormData({
-                          ...editFormData,
-                          first_name: e.target.value,
-                        })
-                      }
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit_email">Email</Label>
-                  <Input
-                    id="edit_email"
-                    type="email"
-                    placeholder="jean.dupont@example.com"
-                    value={editFormData.email}
-                    onChange={(e) =>
-                      setEditFormData({
-                        ...editFormData,
-                        email: e.target.value,
-                      })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit_phone">Téléphone</Label>
-                  <Input
-                    id="edit_phone"
-                    type="tel"
-                    placeholder="06 12 34 56 78"
-                    value={editFormData.phone}
-                    onChange={(e) =>
-                      setEditFormData({
-                        ...editFormData,
-                        phone: e.target.value,
-                      })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit_type">Type</Label>
-                  <Select
-                    value={editFormData.type}
-                    onValueChange={(value) =>
-                      setEditFormData({
-                        ...editFormData,
-                        type: value as ClientType,
-                      })
-                    }
-                  >
-                    <SelectTrigger id="edit_type" className="w-full">
-                      <SelectValue placeholder="Sélectionner un type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="particulier">Particulier</SelectItem>
-                      <SelectItem value="professionnel">
-                        Professionnel
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="flex justify-end">
-                <Button onClick={handleUpdateClient} disabled={isSavingClient}>
-                  {isSavingClient && (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  )}
-                  Enregistrer les modifications
-                </Button>
-              </div>
-
-              <Separator className="my-4" />
-
-              {/* Documents Section */}
-              <div className="space-y-4">
-                <h3 className="font-semibold">Documents</h3>
-                <ClientDocuments
-                  clientId={clientData.id}
-                  onNavigate={() => setShowClientSheet(false)}
-                />
-              </div>
-
-              <Separator className="my-4" />
-
-              {/* Danger Zone */}
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-muted-foreground">
-                  Supprimer ce client
+              {/* Scrollable Content */}
+              <div className="flex-1 overflow-y-auto px-6 py-4 min-h-0">
+                <p className="text-sm text-muted-foreground mb-4">
+                  Modifiez les informations du client
                 </p>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                  onClick={handleDeleteClientFromSheet}
-                  disabled={isSavingClient}
-                >
-                  {isSavingClient ? (
-                    <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
-                  ) : (
-                    <Trash2 className="h-4 w-4 mr-1.5" />
+
+                {/* Edit Form */}
+                <div className="grid gap-4">
+                  {clientEditError && (
+                    <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-600 dark:text-amber-400">
+                      <AlertTriangle className="h-4 w-4 shrink-0" />
+                      <span className="text-sm">{clientEditError}</span>
+                    </div>
                   )}
-                  Supprimer
-                </Button>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="edit_last_name">Nom</Label>
+                      <Input
+                        id="edit_last_name"
+                        placeholder="Dupont"
+                        value={editFormData.last_name}
+                        onChange={(e) =>
+                          setEditFormData({
+                            ...editFormData,
+                            last_name: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit_first_name">Prénom</Label>
+                      <Input
+                        id="edit_first_name"
+                        placeholder="Jean"
+                        value={editFormData.first_name}
+                        onChange={(e) =>
+                          setEditFormData({
+                            ...editFormData,
+                            first_name: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit_email">Email</Label>
+                    <Input
+                      id="edit_email"
+                      type="email"
+                      placeholder="jean.dupont@example.com"
+                      value={editFormData.email}
+                      onChange={(e) =>
+                        setEditFormData({
+                          ...editFormData,
+                          email: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit_phone">Téléphone</Label>
+                    <Input
+                      id="edit_phone"
+                      type="tel"
+                      placeholder="06 12 34 56 78"
+                      value={editFormData.phone}
+                      onChange={(e) =>
+                        setEditFormData({
+                          ...editFormData,
+                          phone: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit_type">Type</Label>
+                    <Select
+                      value={editFormData.type}
+                      onValueChange={(value) =>
+                        setEditFormData({
+                          ...editFormData,
+                          type: value as ClientType,
+                        })
+                      }
+                    >
+                      <SelectTrigger id="edit_type" className="w-full">
+                        <SelectValue placeholder="Sélectionner un type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="particulier">Particulier</SelectItem>
+                        <SelectItem value="professionnel">
+                          Professionnel
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="flex justify-end mt-4">
+                  <Button
+                    onClick={handleUpdateClient}
+                    disabled={isSavingClient}
+                  >
+                    {isSavingClient && (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    )}
+                    Enregistrer les modifications
+                  </Button>
+                </div>
+
+                <Separator className="my-4" />
+
+                {/* Documents Section */}
+                <div className="space-y-4">
+                  <h3 className="font-semibold">Documents</h3>
+                  <ClientDocuments
+                    clientId={clientData.id}
+                    onNavigate={() => setShowClientSheet(false)}
+                  />
+                </div>
+              </div>
+
+              {/* Fixed Footer */}
+              <div className="shrink-0 px-6 py-4 border-t">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-muted-foreground">
+                    Supprimer ce client
+                  </p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                    onClick={handleDeleteClientFromSheet}
+                    disabled={isSavingClient}
+                  >
+                    {isSavingClient ? (
+                      <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4 mr-1.5" />
+                    )}
+                    Supprimer
+                  </Button>
+                </div>
               </div>
             </>
           ) : (

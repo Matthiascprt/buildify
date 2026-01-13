@@ -12,6 +12,7 @@ import {
   calculateTotals,
   calculateLineTotal,
   convertQuoteToInvoice,
+  recalculateSectionTotals,
 } from "@/lib/types/document";
 import type { Company } from "@/lib/supabase/types";
 
@@ -45,18 +46,19 @@ export const documentTools: ChatCompletionTool[] = [
     function: {
       name: "set_client",
       description:
-        "Définit ou met à jour les informations du client sur le document.",
+        "Définit ou met à jour les informations du CLIENT sur le document. Tu as ACCÈS TOTAL pour modifier le client : nom, email, téléphone, adresse. ATTENTION : Le client n'est PAS l'entreprise. L'entreprise est protégée, mais le CLIENT est entièrement modifiable. Utilise cet outil quand l'utilisateur veut changer/ajouter/modifier les infos du client destinataire du devis/facture.",
       parameters: {
         type: "object",
         properties: {
           clientId: {
             type: "number",
             description:
-              "ID du client existant dans la base de données (optionnel)",
+              "ID du client existant dans la base de données. Utilise-le si le client est dans la liste fournie.",
           },
           name: {
             type: "string",
-            description: "Nom complet du client",
+            description:
+              "Nom complet du client (prénom + nom). Exemple: 'Jean Dupont', 'Marie Martin'",
           },
           address: {
             type: "string",
@@ -68,11 +70,13 @@ export const documentTools: ChatCompletionTool[] = [
           },
           phone: {
             type: "string",
-            description: "Numéro de téléphone du client",
+            description:
+              "Numéro de téléphone du client. Tu peux le modifier librement.",
           },
           email: {
             type: "string",
-            description: "Adresse email du client",
+            description:
+              "Adresse email du client. Tu peux la modifier librement.",
           },
           siret: {
             type: "string",
@@ -147,7 +151,7 @@ export const documentTools: ChatCompletionTool[] = [
           unitPrice: {
             type: "number",
             description:
-              "Prix unitaire HT (Hors Taxes) en euros pour UNE unité. Le total HT de la ligne sera calculé: Quantité × Prix unitaire HT",
+              "Prix unitaire HT (Hors Taxes) en euros pour UNE unité. IMPORTANT: Si l'utilisateur donne un prix TTC, tu dois d'abord le convertir en HT avec la formule: HT = TTC / (1 + TVA/100). Exemple: 3000€ TTC avec TVA 10% → HT = 3000/1.10 = 2727.27€",
           },
           tva: {
             type: "number",
@@ -191,7 +195,7 @@ export const documentTools: ChatCompletionTool[] = [
           unitPrice: {
             type: "number",
             description:
-              "Nouveau prix unitaire HT en euros. Le total HT sera recalculé: Quantité × Prix unitaire HT",
+              "Nouveau prix unitaire HT en euros. Si l'utilisateur donne un prix TTC, convertis-le d'abord: HT = TTC / (1 + TVA/100)",
           },
           tva: {
             type: "number",
@@ -219,23 +223,9 @@ export const documentTools: ChatCompletionTool[] = [
       },
     },
   },
-  {
-    type: "function",
-    function: {
-      name: "set_payment_conditions",
-      description: "Définit les conditions de paiement du document.",
-      parameters: {
-        type: "object",
-        properties: {
-          conditions: {
-            type: "string",
-            description: "Texte des conditions de paiement",
-          },
-        },
-        required: ["conditions"],
-      },
-    },
-  },
+  // SUPPRIMÉ: set_payment_conditions - Les conditions de paiement sont définies
+  // uniquement via les Paramètres de l'entreprise et ne peuvent pas être modifiées
+  // par l'IA ou directement sur le document.
   {
     type: "function",
     function: {
@@ -357,12 +347,31 @@ export const documentTools: ChatCompletionTool[] = [
           unitPrice: {
             type: "number",
             description:
-              "Nouveau prix unitaire HT en euros. Le total HT sera recalculé (optionnel)",
+              "Nouveau prix unitaire HT en euros. Si TTC donné, convertis: HT = TTC / (1 + TVA/100) (optionnel)",
           },
           tva: {
             type: "number",
             description:
               "Nouveau taux de TVA en pourcentage: 5.5, 10, 20 (optionnel)",
+          },
+        },
+        required: ["searchTerm"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "find_and_remove_line",
+      description:
+        "SUPPRIMER une ligne en la trouvant par son nom (désignation). Utiliser quand l'utilisateur dit 'supprime la ligne peinture', 'enlève le carrelage', etc.",
+      parameters: {
+        type: "object",
+        properties: {
+          searchTerm: {
+            type: "string",
+            description:
+              "Terme de recherche pour trouver la ligne à supprimer (ex: 'peinture', 'disjoncteur', 'carrelage')",
           },
         },
         required: ["searchTerm"],
@@ -461,6 +470,19 @@ export const documentTools: ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "convert_prices_to_ht_from_ttc",
+      description:
+        "IMPORTANT - Convertit les prix actuels de TTC vers HT. Utilise cet outil quand l'utilisateur dit que les prix qu'il a donnés sont en TTC (pas HT), par exemple: 'en fait c'est du TTC', 'les prix sont TTC', 'c'est TTC pas HT', 'bascule en TTC'. Cet outil recalcule tous les prix unitaires: nouveau_prix_HT = ancien_prix / (1 + TVA/100).",
+      parameters: {
+        type: "object",
+        properties: {},
+        required: [],
+      },
+    },
+  },
 ];
 
 function generateLineId(items: LineItem[]): string {
@@ -498,46 +520,104 @@ function findFirstEmptyLineIndex(items: LineItem[]): number {
   return items.findIndex((item) => isEmptyLine(item));
 }
 
-function recalculateSectionTotals(items: LineItem[]): LineItem[] {
-  const result: LineItem[] = [];
-  let currentSectionIndex = -1;
-
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i];
-    if (item.isSection) {
-      if (currentSectionIndex >= 0) {
-        let sectionTotal = 0;
-        for (let j = currentSectionIndex + 1; j < i; j++) {
-          if (!items[j].isSection) {
-            sectionTotal += items[j].total || 0;
-          }
-        }
-        result[currentSectionIndex] = {
-          ...result[currentSectionIndex],
-          sectionTotal,
-        };
-      }
-      result.push({ ...item });
-      currentSectionIndex = result.length - 1;
-    } else {
-      result.push({ ...item });
-    }
+function generateProjectTitle(designation: string): string {
+  const lower = designation.toLowerCase();
+  if (
+    lower.includes("peinture") ||
+    lower.includes("peindre") ||
+    lower.includes("enduit")
+  ) {
+    return "Travaux de peinture";
   }
-
-  if (currentSectionIndex >= 0) {
-    let sectionTotal = 0;
-    for (let j = currentSectionIndex + 1; j < result.length; j++) {
-      if (!result[j].isSection) {
-        sectionTotal += result[j].total || 0;
-      }
-    }
-    result[currentSectionIndex] = {
-      ...result[currentSectionIndex],
-      sectionTotal,
-    };
+  if (
+    lower.includes("carrelage") ||
+    lower.includes("faïence") ||
+    lower.includes("faience")
+  ) {
+    return "Pose de carrelage";
   }
-
-  return result;
+  if (
+    lower.includes("électri") ||
+    lower.includes("electri") ||
+    lower.includes("disjoncteur") ||
+    lower.includes("tableau")
+  ) {
+    return "Travaux d'électricité";
+  }
+  if (
+    lower.includes("plomberie") ||
+    lower.includes("sanitaire") ||
+    lower.includes("robinet") ||
+    lower.includes("chauffe-eau")
+  ) {
+    return "Travaux de plomberie";
+  }
+  if (
+    lower.includes("menuiserie") ||
+    lower.includes("porte") ||
+    lower.includes("fenêtre") ||
+    lower.includes("fenetre")
+  ) {
+    return "Travaux de menuiserie";
+  }
+  if (
+    lower.includes("maçonnerie") ||
+    lower.includes("maconnerie") ||
+    lower.includes("mur") ||
+    lower.includes("fondation")
+  ) {
+    return "Travaux de maçonnerie";
+  }
+  if (
+    lower.includes("toiture") ||
+    lower.includes("couverture") ||
+    lower.includes("tuile") ||
+    lower.includes("gouttière")
+  ) {
+    return "Travaux de toiture";
+  }
+  if (lower.includes("isolation") || lower.includes("thermique")) {
+    return "Travaux d'isolation";
+  }
+  if (
+    lower.includes("parquet") ||
+    lower.includes("sol") ||
+    lower.includes("revêtement")
+  ) {
+    return "Pose de revêtement de sol";
+  }
+  if (lower.includes("cuisine")) {
+    return "Aménagement de cuisine";
+  }
+  if (
+    lower.includes("salle de bain") ||
+    lower.includes("douche") ||
+    lower.includes("baignoire")
+  ) {
+    return "Aménagement de salle de bain";
+  }
+  if (
+    lower.includes("rénovation") ||
+    lower.includes("renovation") ||
+    lower.includes("travaux")
+  ) {
+    return "Travaux de rénovation";
+  }
+  if (lower.includes("démolition") || lower.includes("demolition")) {
+    return "Travaux de démolition";
+  }
+  if (lower.includes("jardinage") || lower.includes("jardin")) {
+    return "Aménagement extérieur";
+  }
+  if (lower.includes("clim") || lower.includes("chauffage")) {
+    return "Installation climatisation/chauffage";
+  }
+  const words = designation.split(/[\s,.-]+/).filter((w) => w.length > 2);
+  if (words.length > 0) {
+    const firstWord = words[0].charAt(0).toUpperCase() + words[0].slice(1);
+    return `Travaux de ${firstWord.toLowerCase()}`;
+  }
+  return "Travaux divers";
 }
 
 interface ToolContext {
@@ -666,13 +746,13 @@ export function executeToolCall(
           result: "Erreur: Aucun document en cours.",
         };
       }
-      const quantity = args.quantity as number;
-      const unitPrice = args.unitPrice as number;
+      const quantity = Math.round((args.quantity as number) * 100) / 100;
+      const unitPrice = Math.round((args.unitPrice as number) * 100) / 100;
       const unit = (args.unit as string) || "";
       const tva = (args.tva as number) || currentDocument.tvaRate;
       const total = calculateLineTotal(quantity, unitPrice);
+      const designation = args.designation as string;
 
-      // Format quantity: don't show "forfait" or "u", add space for others
       const hiddenUnits = ["forfait", "u", "unité", "unités"];
       const formattedQuantity = hiddenUnits.includes(unit.toLowerCase())
         ? `${quantity}`
@@ -680,15 +760,20 @@ export function executeToolCall(
           ? `${quantity} ${unit}`
           : `${quantity}`;
 
-      // Check if there's an empty line to fill instead of creating a new one
+      const shouldAutoTitle =
+        !currentDocument.projectTitle ||
+        currentDocument.projectTitle.trim() === "";
+      const autoTitle = shouldAutoTitle
+        ? generateProjectTitle(designation)
+        : currentDocument.projectTitle;
+
       const emptyLineIndex = findFirstEmptyLineIndex(currentDocument.items);
 
       if (emptyLineIndex !== -1) {
-        // Fill the empty line instead of creating a new one
         const existingItem = currentDocument.items[emptyLineIndex];
         const updatedItem: LineItem = {
           ...existingItem,
-          designation: args.designation as string,
+          designation,
           description: args.description as string | undefined,
           quantity: formattedQuantity,
           unitPrice,
@@ -705,16 +790,24 @@ export function executeToolCall(
           currentDocument.deposit,
         );
 
+        const resultMsg = shouldAutoTitle
+          ? `Ligne ${emptyLineIndex + 1} complétée: "${updatedItem.designation}" - ${total}€. Titre du projet: "${autoTitle}"`
+          : `Ligne ${emptyLineIndex + 1} complétée: "${updatedItem.designation}" - ${total}€`;
+
         return {
-          document: { ...currentDocument, items: recalculatedItems, ...totals },
-          result: `Ligne ${emptyLineIndex + 1} complétée: "${updatedItem.designation}" - ${total}€`,
+          document: {
+            ...currentDocument,
+            items: recalculatedItems,
+            projectTitle: autoTitle,
+            ...totals,
+          },
+          result: resultMsg,
         };
       }
 
-      // No empty line found, create a new one
       const newItem: LineItem = {
         id: generateLineId(currentDocument.items),
-        designation: args.designation as string,
+        designation,
         description: args.description as string | undefined,
         quantity: formattedQuantity,
         unitPrice,
@@ -733,9 +826,18 @@ export function executeToolCall(
         currentDocument.deposit,
       );
 
+      const resultMsg = shouldAutoTitle
+        ? `Ligne ajoutée: "${newItem.designation}" - ${total}€. Titre du projet: "${autoTitle}"`
+        : `Ligne ajoutée: "${newItem.designation}" - ${total}€`;
+
       return {
-        document: { ...currentDocument, items: newItems, ...totals },
-        result: `Ligne ajoutée: "${newItem.designation}" - ${total}€`,
+        document: {
+          ...currentDocument,
+          items: newItems,
+          projectTitle: autoTitle,
+          ...totals,
+        },
+        result: resultMsg,
       };
     }
 
@@ -768,9 +870,10 @@ export function executeToolCall(
         };
       }
 
+      // Forcer l'arrondi à 2 décimales
       const quantity =
         args.quantity !== undefined
-          ? (args.quantity as number)
+          ? Math.round((args.quantity as number) * 100) / 100
           : parseFloat(existingItem.quantity || "0");
       const unit =
         args.unit !== undefined
@@ -778,7 +881,7 @@ export function executeToolCall(
           : existingItem.quantity?.replace(/[\d.\s]/g, "").trim() || "";
       const unitPrice =
         args.unitPrice !== undefined
-          ? (args.unitPrice as number)
+          ? Math.round((args.unitPrice as number) * 100) / 100
           : existingItem.unitPrice || 0;
       const total = calculateLineTotal(quantity, unitPrice);
 
@@ -850,19 +953,8 @@ export function executeToolCall(
       };
     }
 
-    case "set_payment_conditions": {
-      if (!currentDocument) {
-        return {
-          document: null,
-          result: "Erreur: Aucun document en cours.",
-        };
-      }
-      const conditions = args.conditions as string;
-      return {
-        document: { ...currentDocument, paymentConditions: conditions },
-        result: `Conditions de paiement définies.`,
-      };
-    }
+    // SUPPRIMÉ: case "set_payment_conditions" - Les conditions de paiement
+    // sont définies uniquement via les Paramètres de l'entreprise.
 
     case "set_deposit": {
       if (!currentDocument) {
@@ -983,9 +1075,10 @@ export function executeToolCall(
       }
 
       const existingItem = currentDocument.items[foundIndex];
+      // Forcer l'arrondi à 2 décimales
       const quantity =
         args.quantity !== undefined
-          ? (args.quantity as number)
+          ? Math.round((args.quantity as number) * 100) / 100
           : parseFloat(existingItem.quantity?.replace(/[^\d.]/g, "") || "0");
       const unit =
         args.unit !== undefined
@@ -993,7 +1086,7 @@ export function executeToolCall(
           : existingItem.quantity?.replace(/[\d.\s]/g, "").trim() || "";
       const unitPrice =
         args.unitPrice !== undefined
-          ? (args.unitPrice as number)
+          ? Math.round((args.unitPrice as number) * 100) / 100
           : existingItem.unitPrice || 0;
       const total = calculateLineTotal(quantity, unitPrice);
 
@@ -1032,6 +1125,45 @@ export function executeToolCall(
       };
     }
 
+    case "find_and_remove_line": {
+      if (!currentDocument) {
+        return {
+          document: null,
+          result: "Erreur: Aucun document en cours.",
+        };
+      }
+      const searchTerm = (args.searchTerm as string).toLowerCase();
+      const foundIndex = currentDocument.items.findIndex(
+        (item) =>
+          !item.isSection &&
+          item.designation.toLowerCase().includes(searchTerm),
+      );
+
+      if (foundIndex === -1) {
+        return {
+          document: currentDocument,
+          result: `Erreur: Aucune ligne trouvée contenant "${args.searchTerm}". Lignes disponibles: ${currentDocument.items
+            .filter((i) => !i.isSection)
+            .map((i) => i.designation)
+            .join(", ")}`,
+        };
+      }
+
+      const removedItem = currentDocument.items[foundIndex];
+      const newItems = currentDocument.items.filter((_, i) => i !== foundIndex);
+      const recalculatedItems = recalculateSectionTotals(newItems);
+      const totals = calculateTotals(
+        recalculatedItems,
+        currentDocument.tvaRate,
+        currentDocument.deposit,
+      );
+
+      return {
+        document: { ...currentDocument, items: recalculatedItems, ...totals },
+        result: `Ligne supprimée: "${removedItem.designation}"`,
+      };
+    }
+
     case "recalculate_totals": {
       if (!currentDocument) {
         return {
@@ -1058,12 +1190,9 @@ export function executeToolCall(
           result: "Erreur: Aucun document en cours.",
         };
       }
-      const desiredTTC = args.amount as number;
+      const desiredTTC = Math.round((args.amount as number) * 100) / 100;
 
-      // Si l'acompte est 0, on ajuste le HT au lieu de créer un acompte
       if (currentDocument.deposit === 0) {
-        // Calculer le HT nécessaire pour atteindre le TTC désiré
-        // TTC = HT + (HT * TVA%) donc HT = TTC / (1 + TVA%)
         const avgTvaRate = currentDocument.tvaRate / 100;
         const targetHT =
           Math.round((desiredTTC / (1 + avgTvaRate)) * 100) / 100;
@@ -1090,20 +1219,72 @@ export function executeToolCall(
           return { ...item, unitPrice: newUnitPrice, total: newTotal };
         });
 
-        const recalculatedItems = recalculateSectionTotals(updatedItems);
-        const totals = calculateTotals(
+        let recalculatedItems = recalculateSectionTotals(updatedItems);
+        let totals = calculateTotals(
           recalculatedItems,
           currentDocument.tvaRate,
           0,
         );
 
+        const desiredTTCCents = Math.round(desiredTTC * 100);
+        let currentTTCCents = Math.round(totals.totalTTC * 100);
+        let iterations = 0;
+        const maxIterations = 20;
+
+        while (
+          desiredTTCCents !== currentTTCCents &&
+          iterations < maxIterations
+        ) {
+          iterations++;
+          const ecartCents = desiredTTCCents - currentTTCCents;
+
+          const lastLineIndex = recalculatedItems.findLastIndex(
+            (item) => !item.isSection && (item.unitPrice || 0) > 0,
+          );
+
+          if (lastLineIndex === -1) break;
+
+          const lastItem = recalculatedItems[lastLineIndex];
+          const quantity = parseFloat(
+            lastItem.quantity?.replace(/[^\d.]/g, "") || "1",
+          );
+
+          const tvaRate = lastItem.tva || currentDocument.tvaRate;
+          const tvaMultiplier = 1 + tvaRate / 100;
+          const priceAdjustmentCents = ecartCents / tvaMultiplier / quantity;
+
+          let newUnitPriceCents = Math.round(
+            (lastItem.unitPrice || 0) * 100 + priceAdjustmentCents,
+          );
+          if (
+            newUnitPriceCents === Math.round((lastItem.unitPrice || 0) * 100)
+          ) {
+            newUnitPriceCents += ecartCents > 0 ? 1 : -1;
+          }
+
+          const newUnitPrice = newUnitPriceCents / 100;
+          const newTotal = calculateLineTotal(quantity, newUnitPrice);
+
+          recalculatedItems[lastLineIndex] = {
+            ...lastItem,
+            unitPrice: newUnitPrice,
+            total: newTotal,
+          };
+          recalculatedItems = recalculateSectionTotals(recalculatedItems);
+          totals = calculateTotals(
+            recalculatedItems,
+            currentDocument.tvaRate,
+            0,
+          );
+          currentTTCCents = Math.round(totals.totalTTC * 100);
+        }
+
         return {
           document: { ...currentDocument, items: recalculatedItems, ...totals },
-          result: `Total TTC ajusté à ${totals.totalTTC}€ (prix HT mis à l'échelle)`,
+          result: `Total TTC ajusté à ${totals.totalTTC}€`,
         };
       }
 
-      // Si un acompte existe, on peut l'ajuster
       const currentHT = currentDocument.totalHT;
       const currentTVA = currentDocument.tvaAmount;
       const newDeposit =
@@ -1126,17 +1307,13 @@ export function executeToolCall(
           result: "Erreur: Aucun document en cours.",
         };
       }
-      const desiredTTC = args.amount as number;
+      const desiredTTC = Math.round((args.amount as number) * 100) / 100;
       const method = (args.method as string) || "adjust_ht";
 
-      // Force adjust_ht si l'acompte est 0
       const effectiveMethod =
         currentDocument.deposit === 0 ? "adjust_ht" : method;
 
       if (effectiveMethod === "adjust_ht") {
-        // Calculer le HT nécessaire pour atteindre le TTC désiré
-        // On doit trouver HT tel que HT + TVA(HT) = TTC
-        // Comme chaque ligne peut avoir un taux différent, on calcule un ratio global
         const currentHT = currentDocument.totalHT;
         const currentTVA = currentDocument.tvaAmount;
 
@@ -1148,7 +1325,6 @@ export function executeToolCall(
           };
         }
 
-        // Ratio pour atteindre le nouveau TTC (en gardant l'acompte actuel)
         const targetHTplusTVA = desiredTTC + currentDocument.deposit;
         const currentHTplusTVA = currentHT + currentTVA;
         const ratio = targetHTplusTVA / currentHTplusTVA;
@@ -1164,19 +1340,71 @@ export function executeToolCall(
           return { ...item, unitPrice: newUnitPrice, total: newTotal };
         });
 
-        const recalculatedItems = recalculateSectionTotals(updatedItems);
-        const totals = calculateTotals(
+        let recalculatedItems = recalculateSectionTotals(updatedItems);
+        let totals = calculateTotals(
           recalculatedItems,
           currentDocument.tvaRate,
           currentDocument.deposit,
         );
 
+        const desiredTTCCents = Math.round(desiredTTC * 100);
+        let currentTTCCents = Math.round(totals.totalTTC * 100);
+        let iterations = 0;
+        const maxIterations = 20;
+
+        while (
+          desiredTTCCents !== currentTTCCents &&
+          iterations < maxIterations
+        ) {
+          iterations++;
+          const ecartCents = desiredTTCCents - currentTTCCents;
+
+          const lastLineIndex = recalculatedItems.findLastIndex(
+            (item) => !item.isSection && (item.unitPrice || 0) > 0,
+          );
+
+          if (lastLineIndex === -1) break;
+
+          const lastItem = recalculatedItems[lastLineIndex];
+          const quantity = parseFloat(
+            lastItem.quantity?.replace(/[^\d.]/g, "") || "1",
+          );
+
+          const tvaRate = lastItem.tva || currentDocument.tvaRate;
+          const tvaMultiplier = 1 + tvaRate / 100;
+          const priceAdjustmentCents = ecartCents / tvaMultiplier / quantity;
+
+          let newUnitPriceCents = Math.round(
+            (lastItem.unitPrice || 0) * 100 + priceAdjustmentCents,
+          );
+          if (
+            newUnitPriceCents === Math.round((lastItem.unitPrice || 0) * 100)
+          ) {
+            newUnitPriceCents += ecartCents > 0 ? 1 : -1;
+          }
+
+          const newUnitPrice = newUnitPriceCents / 100;
+          const newTotal = calculateLineTotal(quantity, newUnitPrice);
+
+          recalculatedItems[lastLineIndex] = {
+            ...lastItem,
+            unitPrice: newUnitPrice,
+            total: newTotal,
+          };
+          recalculatedItems = recalculateSectionTotals(recalculatedItems);
+          totals = calculateTotals(
+            recalculatedItems,
+            currentDocument.tvaRate,
+            currentDocument.deposit,
+          );
+          currentTTCCents = Math.round(totals.totalTTC * 100);
+        }
+
         return {
           document: { ...currentDocument, items: recalculatedItems, ...totals },
-          result: `Total TTC ajusté à ${totals.totalTTC}€ (prix HT mis à l'échelle, acompte inchangé: ${currentDocument.deposit}€)`,
+          result: `Total TTC ajusté à ${totals.totalTTC}€`,
         };
       } else {
-        // adjust_deposit: ajuster l'acompte
         const currentHT = currentDocument.totalHT;
         const currentTVA = currentDocument.tvaAmount;
         const newDeposit =
@@ -1207,7 +1435,7 @@ export function executeToolCall(
           result: "Erreur: Aucun document en cours.",
         };
       }
-      const desiredHT = args.amount as number;
+      const desiredHT = Math.round((args.amount as number) * 100) / 100;
       const currentHT = currentDocument.totalHT;
 
       if (currentHT === 0) {
@@ -1218,10 +1446,8 @@ export function executeToolCall(
         };
       }
 
-      // Calculer le ratio pour ajuster tous les prix
       const ratio = desiredHT / currentHT;
 
-      // Ajuster tous les prix unitaires proportionnellement
       const updatedItems = currentDocument.items.map((item) => {
         if (item.isSection) return item;
         const newUnitPrice =
@@ -1230,6 +1456,101 @@ export function executeToolCall(
           item.quantity?.replace(/[^\d.]/g, "") || "0",
         );
         const newTotal = calculateLineTotal(quantity, newUnitPrice);
+        return { ...item, unitPrice: newUnitPrice, total: newTotal };
+      });
+
+      let recalculatedItems = recalculateSectionTotals(updatedItems);
+      let totals = calculateTotals(
+        recalculatedItems,
+        currentDocument.tvaRate,
+        currentDocument.deposit,
+      );
+
+      const desiredHTCents = Math.round(desiredHT * 100);
+      let currentHTCents = Math.round(totals.totalHT * 100);
+      let iterations = 0;
+      const maxIterations = 20;
+
+      while (desiredHTCents !== currentHTCents && iterations < maxIterations) {
+        iterations++;
+        const ecartCents = desiredHTCents - currentHTCents;
+
+        const lastLineIndex = recalculatedItems.findLastIndex(
+          (item) => !item.isSection && (item.unitPrice || 0) > 0,
+        );
+
+        if (lastLineIndex === -1) break;
+
+        const lastItem = recalculatedItems[lastLineIndex];
+        const quantity = parseFloat(
+          lastItem.quantity?.replace(/[^\d.]/g, "") || "1",
+        );
+
+        const priceAdjustmentCents = ecartCents / quantity;
+        let newUnitPriceCents = Math.round(
+          (lastItem.unitPrice || 0) * 100 + priceAdjustmentCents,
+        );
+        if (newUnitPriceCents === Math.round((lastItem.unitPrice || 0) * 100)) {
+          newUnitPriceCents += ecartCents > 0 ? 1 : -1;
+        }
+
+        const newUnitPrice = newUnitPriceCents / 100;
+        const newTotal = calculateLineTotal(quantity, newUnitPrice);
+
+        recalculatedItems[lastLineIndex] = {
+          ...lastItem,
+          unitPrice: newUnitPrice,
+          total: newTotal,
+        };
+        recalculatedItems = recalculateSectionTotals(recalculatedItems);
+        totals = calculateTotals(
+          recalculatedItems,
+          currentDocument.tvaRate,
+          currentDocument.deposit,
+        );
+        currentHTCents = Math.round(totals.totalHT * 100);
+      }
+
+      return {
+        document: { ...currentDocument, items: recalculatedItems, ...totals },
+        result: `Total HT ajusté à ${totals.totalHT}€`,
+      };
+    }
+
+    case "convert_prices_to_ht_from_ttc": {
+      if (!currentDocument) {
+        return {
+          document: null,
+          result: "Erreur: Aucun document en cours.",
+        };
+      }
+
+      const hasLines = currentDocument.items.some(
+        (item) => !item.isSection && (item.unitPrice || 0) > 0,
+      );
+
+      if (!hasLines) {
+        return {
+          document: currentDocument,
+          result: "Erreur: Aucune ligne avec un prix à convertir.",
+        };
+      }
+
+      // Convertir tous les prix de TTC vers HT
+      const updatedItems = currentDocument.items.map((item) => {
+        if (item.isSection) return item;
+        const currentPrice = item.unitPrice || 0;
+        if (currentPrice === 0) return item;
+
+        const tvaRate = item.tva ?? currentDocument.tvaRate;
+        // Le prix actuel est considéré comme TTC, on calcule le HT
+        const newUnitPrice =
+          Math.round((currentPrice / (1 + tvaRate / 100)) * 100) / 100;
+        const quantity = parseFloat(
+          item.quantity?.replace(/[^\d.]/g, "") || "1",
+        );
+        const newTotal = calculateLineTotal(quantity, newUnitPrice);
+
         return { ...item, unitPrice: newUnitPrice, total: newTotal };
       });
 
@@ -1242,7 +1563,7 @@ export function executeToolCall(
 
       return {
         document: { ...currentDocument, items: recalculatedItems, ...totals },
-        result: `Total HT ajusté à ${totals.totalHT}€ (prix unitaires mis à l'échelle)`,
+        result: `Prix convertis de TTC vers HT. Nouveau total HT: ${totals.totalHT}€, TTC: ${totals.totalTTC}€`,
       };
     }
 

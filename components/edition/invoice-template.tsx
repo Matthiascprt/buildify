@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { EditableField } from "./editable-field";
 
 const formatPrice = (value: number | undefined): string => {
@@ -49,6 +50,9 @@ interface InvoiceData {
     phone: string;
     email: string;
     siret: string;
+    logoUrl?: string;
+    paymentTerms?: string;
+    legalNotice?: string;
   };
   client: {
     name?: string;
@@ -125,15 +129,18 @@ const defaultData: InvoiceData = {
     "Acompte à xx , espèce ou virement bancaire sur le compte : xxxx",
 };
 
+// Champs protégés (modifiables uniquement via Paramètres):
+// - Toutes les infos entreprise (company.*)
+// - Numéro de document (number)
+// - Date d'émission (date)
+// - Conditions de paiement (paymentTerms via company)
+// - Mentions légales (legalNotice via company)
+
 type UpdatePath =
-  | "number"
-  | "date"
   | "dueDate"
   | "projectTitle"
-  | "paymentConditions"
   | "deposit"
   | "tvaRate"
-  | `company.${keyof InvoiceData["company"]}`
   | `client.${keyof InvoiceData["client"]}`
   | `items.${number}.designation`
   | `items.${number}.description`
@@ -174,23 +181,24 @@ export function InvoiceTemplate({
     <div className="w-full max-w-[210mm] mx-auto bg-card text-card-foreground p-8 text-sm font-sans">
       {/* Header */}
       <div className="flex justify-between items-start mb-8">
-        <div className="w-40 h-20 bg-muted flex items-center justify-center text-muted-foreground font-semibold">
-          LOGO
-        </div>
+        {data.company.logoUrl ? (
+          <Image
+            src={data.company.logoUrl}
+            alt="Logo entreprise"
+            width={160}
+            height={80}
+            className="w-40 h-20 object-contain object-left"
+            unoptimized
+          />
+        ) : (
+          <div className="w-40 h-20 bg-muted flex items-center justify-center text-muted-foreground font-semibold">
+            LOGO
+          </div>
+        )}
         <div className="text-right">
-          <h1 className="text-xl font-bold">
-            Facture n°{" "}
-            <EditableField
-              value={data.number}
-              onSave={(v) => handleUpdate("number", v)}
-            />
-          </h1>
+          <h1 className="text-xl font-bold">Facture n° {data.number}</h1>
           <p className="text-muted-foreground">
-            Date d&apos;émission :{" "}
-            <EditableField
-              value={data.date}
-              onSave={(v) => handleUpdate("date", v)}
-            />
+            Date d&apos;émission : {data.date}
           </p>
           <p className="text-muted-foreground">
             Échéance :{" "}
@@ -204,48 +212,15 @@ export function InvoiceTemplate({
 
       {/* Company and Client Info */}
       <div className="grid grid-cols-2 gap-8 mb-8">
-        {/* Company */}
+        {/* Company - Champs protégés (modifiables uniquement via Paramètres) */}
         <div>
-          <h2 className="font-bold text-lg mb-3">
-            <EditableField
-              value={data.company.name}
-              onSave={(v) => handleUpdate("company.name", v)}
-            />
-          </h2>
+          <h2 className="font-bold text-lg mb-3">{data.company.name}</h2>
           <div className="space-y-1 text-muted-foreground">
-            <p>
-              <EditableField
-                value={data.company.address}
-                onSave={(v) => handleUpdate("company.address", v)}
-              />
-            </p>
-            {data.company.city && (
-              <p>
-                <EditableField
-                  value={data.company.city}
-                  onSave={(v) => handleUpdate("company.city", v)}
-                />
-              </p>
-            )}
-            <p>
-              <EditableField
-                value={data.company.phone}
-                onSave={(v) => handleUpdate("company.phone", v)}
-              />
-            </p>
-            <p>
-              <EditableField
-                value={data.company.email}
-                onSave={(v) => handleUpdate("company.email", v)}
-              />
-            </p>
-            <p>
-              SIRET:{" "}
-              <EditableField
-                value={data.company.siret}
-                onSave={(v) => handleUpdate("company.siret", v)}
-              />
-            </p>
+            <p>{data.company.address}</p>
+            {data.company.city && <p>{data.company.city}</p>}
+            <p>{data.company.phone}</p>
+            <p>{data.company.email}</p>
+            <p>SIRET: {data.company.siret}</p>
           </div>
         </div>
 
@@ -454,20 +429,15 @@ export function InvoiceTemplate({
 
       {/* Footer - Payment Conditions Only (no signature for invoice) */}
       <div className="mt-6">
-        <h3 className="font-bold mb-2">Condition de paiement</h3>
-        <p className="text-xs max-w-xs text-muted-foreground">
-          <EditableField
-            value={data.paymentConditions}
-            onSave={(v) => handleUpdate("paymentConditions", v)}
-            placeholder="Conditions de paiement"
-            multiline
-          />
+        <h3 className="font-bold mb-2">Conditions de paiement</h3>
+        <p className="text-xs max-w-sm text-muted-foreground whitespace-pre-line">
+          {data.company.paymentTerms || data.paymentConditions || "Aucune"}
         </p>
       </div>
 
       {/* Legal Notice */}
-      <div className="text-center mt-8 text-xs text-muted-foreground">
-        Mention légales
+      <div className="text-center mt-8 text-xs text-muted-foreground whitespace-pre-line">
+        {data.company.legalNotice || "Aucune mention légale"}
       </div>
     </div>
   );

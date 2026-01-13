@@ -16,6 +16,7 @@ import {
   createQuoteWithContent,
   createInvoiceWithContent,
   getCurrentUser,
+  getNextInvoiceNumber,
 } from "@/lib/supabase/api";
 import { parseUserIntent } from "@/lib/ai/intent-parser";
 
@@ -42,6 +43,7 @@ interface ChatResponse {
   message: string;
   document: DocumentData | null;
   accentColor?: string | null;
+  newClient?: Client | null;
 }
 
 const MAX_TOOL_ITERATIONS = 10;
@@ -72,6 +74,7 @@ export async function POST(
       value: undefined,
     };
     const autoActions: string[] = [];
+    const newClientState: { client: Client | null } = { client: null };
 
     if (isFirstMessage && !currentDocument && messages.length > 0) {
       const lastMessage = messages[messages.length - 1];
@@ -95,6 +98,17 @@ export async function POST(
       autoActions,
     });
 
+    // DEBUG: Log what the AI sees
+    console.log("=== DEBUG AI CONTEXT ===");
+    console.log(
+      "Document items:",
+      workingDocument?.items?.length || 0,
+      "lignes",
+    );
+    console.log("Items:", JSON.stringify(workingDocument?.items, null, 2));
+    console.log("System prompt (last 1000 chars):", systemPrompt.slice(-1000));
+    console.log("========================");
+
     const toolContext = {
       company: company || {
         id: "",
@@ -108,6 +122,8 @@ export async function POST(
         siret: null,
         vat_rate: 20,
         logo_url: null,
+        payment_terms: null,
+        legal_notice: null,
       },
       nextQuoteNumber,
       nextInvoiceNumber,
@@ -150,6 +166,9 @@ export async function POST(
         };
         if (accentColorState.value !== undefined) {
           response.accentColor = accentColorState.value;
+        }
+        if (newClientState.client) {
+          response.newClient = newClientState.client;
         }
         return NextResponse.json(response);
       }
@@ -209,6 +228,36 @@ export async function POST(
           }
         }
 
+        // Handle convert_to_invoice - create new invoice in database (keeps quote)
+        if (
+          functionName === "convert_to_invoice" &&
+          workingDocument &&
+          workingDocument.type === "invoice"
+        ) {
+          try {
+            // Get the actual next invoice number from database
+            const invoiceNumber = await getNextInvoiceNumber();
+            workingDocument.number = invoiceNumber;
+
+            const { type: docType, ...contentWithoutType } = workingDocument;
+            const contentForDb = { ...contentWithoutType, type: docType };
+            delete (contentForDb as Record<string, unknown>).id;
+
+            const dbResult = await createInvoiceWithContent(
+              invoiceNumber,
+              contentForDb as unknown as Record<string, unknown>,
+              undefined,
+              workingDocument.client?.id,
+            );
+
+            if (dbResult.success && dbResult.invoice) {
+              workingDocument.id = dbResult.invoice.id;
+            }
+          } catch (error) {
+            console.error("Error creating invoice from quote:", error);
+          }
+        }
+
         // Handle client creation when set_client is called
         if (functionName === "set_client" && workingDocument?.id) {
           const clientResult = await handleClientAssociation(
@@ -233,6 +282,10 @@ export async function POST(
               email: clientResult.client.email || "",
               siret: workingDocument.client.siret || "",
             };
+            // Track if this is a newly created client (not in the original clients list)
+            if (!clients.some((c) => c.id === clientResult.client!.id)) {
+              newClientState.client = clientResult.client;
+            }
           }
         }
 
@@ -258,6 +311,9 @@ export async function POST(
     if (accentColorState.value !== undefined) {
       response.accentColor = accentColorState.value;
     }
+    if (newClientState.client) {
+      response.newClient = newClientState.client;
+    }
     return NextResponse.json(response);
   } catch (error) {
     console.error("OpenAI API error:", error);
@@ -282,7 +338,6 @@ async function saveDocumentToDatabase(
       await updateQuote(document.id, {
         content,
         valid_until: parseValidityToDate(document.validity),
-        payment_terms: document.paymentConditions || null,
         client_id: document.client?.id,
         ...(color !== undefined && { color }),
       });
@@ -290,7 +345,6 @@ async function saveDocumentToDatabase(
       await updateInvoice(document.id, {
         content,
         due_date: parseDateString(document.dueDate),
-        payment_terms: document.paymentConditions || null,
         client_id: document.client?.id,
         ...(color !== undefined && { color }),
       });
@@ -460,6 +514,8 @@ async function handleAutoCreation(
     email: company?.email || "",
     siret: company?.siret || "",
     logoUrl: company?.logo_url || undefined,
+    paymentTerms: company?.payment_terms || undefined,
+    legalNotice: company?.legal_notice || undefined,
   };
 
   const defaultTvaRate = company?.vat_rate ?? 20;

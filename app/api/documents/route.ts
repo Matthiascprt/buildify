@@ -122,7 +122,6 @@ export async function PUT(req: NextRequest) {
         valid_until: quoteContent.validity
           ? parseValidityToDate(quoteContent.validity as string)
           : undefined,
-        payment_terms: (quoteContent.paymentConditions as string) || null,
       });
 
       if (!result.success) {
@@ -142,7 +141,6 @@ export async function PUT(req: NextRequest) {
         due_date: invoiceContent.dueDate
           ? parseDateString(invoiceContent.dueDate as string)
           : undefined,
-        payment_terms: (invoiceContent.paymentConditions as string) || null,
       });
 
       if (!result.success) {

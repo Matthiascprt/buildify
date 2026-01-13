@@ -243,6 +243,51 @@ export async function updateClient(
     return { success: false, error: "Aucune entreprise associée" };
   }
 
+  // Check for duplicates before updating (excluding current client)
+  const existingClients = await getClients();
+  const duplicates: string[] = [];
+
+  const newFirst = (updates.first_name || "").toLowerCase().trim();
+  const newLast = (updates.last_name || "").toLowerCase().trim();
+  const newEmail = (updates.email || "").toLowerCase().trim();
+  const newPhone = (updates.phone || "").replace(/\s/g, "").trim();
+
+  for (const client of existingClients) {
+    // Skip the client being updated
+    if (client.id === clientId) continue;
+
+    const existFirst = (client.first_name || "").toLowerCase().trim();
+    const existLast = (client.last_name || "").toLowerCase().trim();
+    const existEmail = (client.email || "").toLowerCase().trim();
+    const existPhone = (client.phone || "").replace(/\s/g, "").trim();
+
+    // Check name match (first_name + last_name combined)
+    if (
+      newFirst &&
+      newLast &&
+      existFirst === newFirst &&
+      existLast === newLast
+    ) {
+      duplicates.push(
+        `Le client "${client.first_name} ${client.last_name}" existe déjà`,
+      );
+    }
+
+    // Check email match
+    if (newEmail && existEmail && existEmail === newEmail) {
+      duplicates.push(`L'email "${updates.email}" est déjà utilisé`);
+    }
+
+    // Check phone match
+    if (newPhone && existPhone && existPhone === newPhone) {
+      duplicates.push(`Le téléphone "${updates.phone}" est déjà utilisé`);
+    }
+  }
+
+  if (duplicates.length > 0) {
+    return { success: false, error: duplicates[0] };
+  }
+
   const { data, error } = await supabase
     .from("clients")
     .update(updates)
@@ -934,7 +979,6 @@ export async function createQuoteWithContent(
       quote_number: quoteNumber,
       valid_until: validUntilDate,
       content,
-      payment_terms: null,
     })
     .select()
     .single();
@@ -975,7 +1019,6 @@ export async function createInvoiceWithContent(
       invoice_number: invoiceNumber,
       due_date: dueDateValue,
       content,
-      payment_terms: null,
     })
     .select()
     .single();
@@ -1155,14 +1198,73 @@ export async function syncClientFromDocument(
       .single();
 
     if (currentClient) {
-      if (clientPhone && clientPhone !== currentClient.phone) {
+      // Ignore placeholder/default values
+      const isPlaceholderPhone = (val: string) => {
+        const lower = val.toLowerCase().trim();
+        return (
+          lower === "téléphone" ||
+          lower === "telephone" ||
+          lower === "tel" ||
+          lower === "phone"
+        );
+      };
+      const isPlaceholderEmail = (val: string) => {
+        const lower = val.toLowerCase().trim();
+        return (
+          lower === "email" ||
+          lower === "e-mail" ||
+          lower === "mail" ||
+          !val.includes("@")
+        );
+      };
+
+      if (
+        clientPhone &&
+        clientPhone !== currentClient.phone &&
+        !isPlaceholderPhone(clientPhone)
+      ) {
         updates.phone = clientPhone;
       }
-      if (clientEmail && clientEmail !== currentClient.email) {
+      if (
+        clientEmail &&
+        clientEmail !== currentClient.email &&
+        !isPlaceholderEmail(clientEmail)
+      ) {
         updates.email = clientEmail;
       }
 
       if (Object.keys(updates).length > 0) {
+        // Check for duplicates before updating
+        const existingClients = await getClients();
+        const newEmail = (updates.email || "").toLowerCase().trim();
+        const newPhone = (updates.phone || "").replace(/\s/g, "").trim();
+
+        for (const client of existingClients) {
+          // Skip the client being updated
+          if (client.id === currentClientId) continue;
+
+          const existEmail = (client.email || "").toLowerCase().trim();
+          const existPhone = (client.phone || "").replace(/\s/g, "").trim();
+
+          // Check email match
+          if (newEmail && existEmail && existEmail === newEmail) {
+            return {
+              success: false,
+              error: `L'email "${updates.email}" est déjà utilisé`,
+              action: "none",
+            };
+          }
+
+          // Check phone match
+          if (newPhone && existPhone && existPhone === newPhone) {
+            return {
+              success: false,
+              error: `Le téléphone "${updates.phone}" est déjà utilisé`,
+              action: "none",
+            };
+          }
+        }
+
         const { data: updatedClient, error: updateError } = await supabase
           .from("clients")
           .update(updates)
@@ -1292,6 +1394,77 @@ export interface RecentActivity {
   clientName: string | null;
   totalTTC: number;
   createdAt: string;
+}
+
+// ============ LOGO UPLOAD ============
+
+export async function updateCompanyLogoUrl(
+  logoUrl: string | null,
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+  const user = await getCurrentUser();
+
+  if (!user) {
+    return { success: false, error: "Non authentifié" };
+  }
+
+  const company = await getCompany();
+  if (!company) {
+    return { success: false, error: "Aucune entreprise associée" };
+  }
+
+  // If deleting logo, remove old file from storage bucket
+  if (logoUrl === null && company.logo_url) {
+    try {
+      // Extract file path from URL: .../client-uploads/Logo clients/filename.ext
+      const url = new URL(company.logo_url);
+      const pathMatch = url.pathname.match(
+        /\/storage\/v1\/object\/public\/client-uploads\/(.+)$/,
+      );
+      if (pathMatch && pathMatch[1]) {
+        const filePath = decodeURIComponent(pathMatch[1]);
+        const { error: deleteError } = await supabase.storage
+          .from("client-uploads")
+          .remove([filePath]);
+        if (deleteError) {
+          console.error("Error deleting logo from storage:", deleteError);
+        }
+      }
+    } catch (err) {
+      console.error("Error parsing logo URL for deletion:", err);
+    }
+  }
+
+  const { error: updateError } = await supabase
+    .from("companies")
+    .update({ logo_url: logoUrl })
+    .eq("id", company.id);
+
+  if (updateError) {
+    console.error("Error updating company logo URL:", updateError);
+    return { success: false, error: updateError.message };
+  }
+
+  return { success: true };
+}
+
+export async function getLogoUploadInfo(): Promise<{
+  success: boolean;
+  error?: string;
+  userId?: string;
+}> {
+  const user = await getCurrentUser();
+
+  if (!user) {
+    return { success: false, error: "Non authentifié" };
+  }
+
+  const company = await getCompany();
+  if (!company) {
+    return { success: false, error: "Aucune entreprise associée" };
+  }
+
+  return { success: true, userId: user.id };
 }
 
 export async function getTodayActivity(): Promise<RecentActivity[]> {
