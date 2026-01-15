@@ -12,6 +12,7 @@ export type Company = {
   created_at: string;
   user_id: string | null;
   name: string | null;
+  activity: string | null;
   legal_status: string | null;
   address: string | null;
   email: string | null;

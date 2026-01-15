@@ -40,7 +40,7 @@ const styles = StyleSheet.create({
     fontFamily: "Helvetica",
     fontSize: 10,
     padding: 40,
-    paddingBottom: 80,
+    paddingBottom: 140,
     color: colors.text,
     backgroundColor: colors.white,
   },
@@ -186,7 +186,7 @@ const styles = StyleSheet.create({
   },
   footerSection: {
     position: "absolute",
-    bottom: 40,
+    bottom: 50,
     left: 40,
     right: 40,
   },
@@ -210,6 +210,15 @@ const styles = StyleSheet.create({
     paddingTop: 15,
     borderTopWidth: 1,
     borderTopColor: colors.border,
+  },
+  pageNumber: {
+    position: "absolute",
+    bottom: 20,
+    left: 0,
+    right: 0,
+    textAlign: "center",
+    fontSize: 8,
+    color: colors.textMuted,
   },
 });
 
@@ -326,7 +335,10 @@ export function InvoicePDFTemplate({
 
         {/* Items Table */}
         <View style={styles.table}>
-          <View style={[styles.tableHeader, { backgroundColor: bgColor }]}>
+          <View
+            style={[styles.tableHeader, { backgroundColor: bgColor }]}
+            fixed
+          >
             <Text
               style={[
                 styles.tableHeaderCell,
@@ -386,6 +398,7 @@ export function InvoicePDFTemplate({
             <View
               key={item.lineId}
               style={item.isSection ? styles.tableSectionRow : styles.tableRow}
+              wrap={false}
             >
               <Text
                 style={[
@@ -472,6 +485,15 @@ export function InvoicePDFTemplate({
             {data.company.legalNotice || "Aucune mention légale"}
           </Text>
         </View>
+
+        {/* Page number */}
+        <Text
+          style={styles.pageNumber}
+          render={({ pageNumber, totalPages }) =>
+            `Page ${pageNumber} / ${totalPages}`
+          }
+          fixed
+        />
       </Page>
     </Document>
   );

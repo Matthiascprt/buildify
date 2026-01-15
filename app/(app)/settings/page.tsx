@@ -49,6 +49,8 @@ import {
 const settingsSchema = z.object({
   firstName: z.string().optional(),
   lastName: z.string().optional(),
+  profileEmail: z.string().email("Email invalide").optional().or(z.literal("")),
+  profilePhone: z.string().optional(),
   companyName: z.string().optional(),
   siret: z.string().optional(),
   address: z.string().optional(),
@@ -77,6 +79,8 @@ export default function SettingsPage() {
     defaultValues: {
       firstName: "",
       lastName: "",
+      profileEmail: "",
+      profilePhone: "",
       companyName: "",
       siret: "",
       address: "",
@@ -97,11 +101,13 @@ export default function SettingsPage() {
         form.reset({
           firstName: profile?.first_name ?? "",
           lastName: profile?.last_name ?? "",
+          profileEmail: profile?.email ?? "",
+          profilePhone: profile?.phone ?? "",
           companyName: company?.name ?? "",
           siret: company?.siret ?? "",
           address: company?.address ?? "",
-          phone: company?.phone ?? profile?.phone ?? "",
-          email: company?.email ?? profile?.email ?? "",
+          phone: company?.phone ?? "",
+          email: company?.email ?? "",
           vatRate: company?.vat_rate ?? 20,
           legalStatus: company?.legal_status ?? "",
           paymentTerms: company?.payment_terms ?? "",
@@ -242,8 +248,8 @@ export default function SettingsPage() {
         updateProfile({
           first_name: data.firstName || null,
           last_name: data.lastName || null,
-          phone: data.phone || null,
-          email: data.email || null,
+          email: data.profileEmail || null,
+          phone: data.profilePhone || null,
         }),
         updateCompany({
           name: data.companyName || null,
@@ -342,6 +348,38 @@ export default function SettingsPage() {
                         <FormLabel>Nom</FormLabel>
                         <FormControl>
                           <Input placeholder="Dupont" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <FormField
+                    control={form.control}
+                    name="profileEmail"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="email"
+                            placeholder="jean.dupont@email.com"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="profilePhone"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Téléphone</FormLabel>
+                        <FormControl>
+                          <Input placeholder="06 12 34 56 78" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>

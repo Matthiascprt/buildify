@@ -461,6 +461,7 @@ export function DocumentPreview({
                   className="h-8 w-8 rounded-full bg-muted hover:bg-muted/80"
                   onClick={onAddLine}
                   title="Ajouter une ligne"
+                  data-tour-id="tour-add-line-button"
                 >
                   <Plus className="h-4 w-4 text-muted-foreground" />
                 </Button>
@@ -487,6 +488,7 @@ export function DocumentPreview({
                         ? "Annuler la suppression"
                         : "Supprimer des lignes"
                     }
+                    data-tour-id="tour-remove-line-button"
                   >
                     <Minus
                       className={`h-4 w-4 ${deleteLineMode ? "text-destructive" : "text-muted-foreground"}`}
@@ -500,6 +502,7 @@ export function DocumentPreview({
                 className="h-8 w-8 rounded-full bg-muted hover:bg-muted/80"
                 onClick={handleDownloadPDF}
                 disabled={isGeneratingPDF}
+                data-tour-id="tour-download-button"
               >
                 {isGeneratingPDF ? (
                   <Loader2 className="h-4 w-4 text-muted-foreground animate-spin" />
@@ -514,6 +517,7 @@ export function DocumentPreview({
                   className="h-8 w-8 rounded-full bg-muted hover:bg-muted/80"
                   onClick={() => setShowColorPicker(!showColorPicker)}
                   title="Changer la couleur"
+                  data-tour-id="tour-color-button"
                 >
                   <Palette className="h-4 w-4 text-muted-foreground" />
                 </Button>
@@ -551,6 +555,7 @@ export function DocumentPreview({
                     ? "Voir la fiche client"
                     : "Aucun client lié"
                 }
+                data-tour-id="tour-client-button"
               >
                 <User
                   className={`h-4 w-4 ${
@@ -567,6 +572,7 @@ export function DocumentPreview({
                   className="h-8 w-8 rounded-full bg-muted hover:bg-muted/80"
                   onClick={handleConvertClick}
                   title="Convertir en facture"
+                  data-tour-id="tour-convert-button"
                 >
                   <Receipt className="h-4 w-4 text-muted-foreground" />
                 </Button>
@@ -578,6 +584,7 @@ export function DocumentPreview({
                   className="h-8 w-8 rounded-full bg-muted hover:bg-muted/80"
                   onClick={() => setShowSignatureModal(true)}
                   title="Signer le document"
+                  data-tour-id="tour-signature-button"
                 >
                   <PenLine className="h-4 w-4 text-muted-foreground" />
                 </Button>
@@ -587,6 +594,8 @@ export function DocumentPreview({
                 size="icon"
                 className="h-8 w-8 rounded-full bg-muted hover:bg-muted/80"
                 onClick={handleDeleteClick}
+                title="Supprimer le document"
+                data-tour-id="tour-delete-button"
               >
                 <Trash2 className="h-4 w-4 text-muted-foreground" />
               </Button>
@@ -657,6 +666,7 @@ export function DocumentPreview({
               <div
                 ref={documentRef}
                 className="w-full max-w-2xl rounded-lg border bg-background shadow-sm"
+                data-tour-id="tour-document-preview"
               >
                 <QuoteTemplate
                   data={mapToQuoteTemplateData(document)}
@@ -674,6 +684,7 @@ export function DocumentPreview({
               <div
                 ref={documentRef}
                 className="w-full max-w-2xl rounded-lg border bg-background shadow-sm"
+                data-tour-id="tour-document-preview"
               >
                 <InvoiceTemplate
                   data={mapToInvoiceTemplateData(document)}

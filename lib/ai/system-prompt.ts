@@ -59,7 +59,7 @@ TOTAUX (calculés automatiquement par l'application - NE PAS MODIFIER):
 # CONTEXTE ENTREPRISE
 Nom: ${company?.name || "Non configuré"}
 SIRET: ${company?.siret || "N/A"}
-TVA par défaut: ${company?.vat_rate || 20}%
+TVA par défaut: ${company?.vat_rate || 10}%
 
 # CLIENTS DISPONIBLES
 ${clientsList}

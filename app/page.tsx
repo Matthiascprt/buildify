@@ -675,7 +675,7 @@ export default function LandingPage() {
             <Link href="/login">Connexion</Link>
           </Button>
           <Button asChild className="hidden sm:inline-flex">
-            <Link href="/register">Commencer</Link>
+            <Link href="/onboarding">Commencer</Link>
           </Button>
         </div>
       </header>
@@ -727,7 +727,7 @@ export default function LandingPage() {
                 className="flex justify-center"
               >
                 <Link
-                  href="/register"
+                  href="/onboarding"
                   className="group relative inline-flex items-center justify-center h-14 px-10 text-lg font-semibold text-white bg-gradient-to-r from-primary to-orange-500 rounded-xl shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/40 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 overflow-hidden"
                 >
                   <span className="relative z-10 flex items-center gap-2">
@@ -1351,7 +1351,7 @@ export default function LandingPage() {
                     variant={plan.popular ? "default" : "outline"}
                     asChild
                   >
-                    <Link href="/register">{plan.cta}</Link>
+                    <Link href="/onboarding">{plan.cta}</Link>
                   </Button>
                 </motion.div>
               ))}
@@ -1501,7 +1501,7 @@ export default function LandingPage() {
               jours d&apos;essai gratuit, sans engagement.
             </p>
             <Button size="lg" className="text-base h-12 px-8" asChild>
-              <Link href="/register">
+              <Link href="/onboarding">
                 Créer mon compte gratuitement
                 <ArrowRight className="w-4 h-4 ml-2" />
               </Link>
@@ -1614,7 +1614,7 @@ export default function LandingPage() {
                   </Link>
                 </li>
                 <li>
-                  <Link href="/register" className="hover:text-zinc-900">
+                  <Link href="/onboarding" className="hover:text-zinc-900">
                     Créer un compte
                   </Link>
                 </li>

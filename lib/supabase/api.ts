@@ -504,11 +504,8 @@ export async function getLogoUploadInfo(): Promise<{
     return { success: false, error: "Non authentifié" };
   }
 
-  const company = await getCompany();
-  if (!company) {
-    return { success: false, error: "Aucune entreprise associée" };
-  }
-
+  // Note: We only need userId for the file path
+  // Company may not exist yet during initial setup
   return { success: true, userId: user.id };
 }
 
@@ -562,6 +559,27 @@ export async function getQuote(quoteId: string): Promise<Quote | null> {
 
   if (error) {
     console.error("Error fetching quote:", error);
+    return null;
+  }
+
+  return data;
+}
+
+export async function getLastQuote(): Promise<Quote | null> {
+  const supabase = await createClient();
+  const company = await getCompany();
+
+  if (!company) return null;
+
+  const { data, error } = await supabase
+    .from("quotes")
+    .select("*")
+    .eq("company_id", company.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .single();
+
+  if (error) {
     return null;
   }
 

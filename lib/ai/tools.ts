@@ -40,7 +40,7 @@ export const documentTools: ChatCompletionTool[] = [
                 },
                 vat_rate: {
                   type: "number",
-                  description: "VAT rate percentage (default 20)",
+                  description: "VAT rate percentage (default 10)",
                 },
                 is_section: {
                   type: "boolean",

@@ -84,7 +84,7 @@ export type DocumentData = QuoteData | InvoiceData;
 export function createEmptyQuote(
   company: DocumentCompany,
   quoteNumber: string,
-  defaultTvaRate: number = 20,
+  defaultTvaRate: number = 10,
 ): QuoteData {
   const today = new Date();
   const formattedDate = today.toLocaleDateString("fr-FR");
@@ -115,7 +115,7 @@ export function createEmptyQuote(
 export function createEmptyInvoice(
   company: DocumentCompany,
   invoiceNumber: string,
-  defaultTvaRate: number = 20,
+  defaultTvaRate: number = 10,
 ): InvoiceData {
   const today = new Date();
   const formattedDate = today.toLocaleDateString("fr-FR");
@@ -329,7 +329,7 @@ export function quoteToDocumentData(
   client?: Client | null,
 ): QuoteData {
   const items: LineItem[] = (quote.content?.lines || []).map((line, index) => {
-    const vatRate = line.vat_rate || 20;
+    const vatRate = line.vat_rate || 10;
     // Convert total_ttc back to total_ht for frontend
     const totalHT = line.is_section
       ? 0
@@ -356,7 +356,7 @@ export function quoteToDocumentData(
   const firstLineWithVat = (quote.content?.lines || []).find(
     (line) => !line.is_section && line.vat_rate,
   );
-  const tvaRate = firstLineWithVat?.vat_rate || company.vat_rate || 20;
+  const tvaRate = firstLineWithVat?.vat_rate || company.vat_rate || 10;
 
   return {
     type: "quote",
@@ -409,7 +409,7 @@ export function invoiceToDocumentData(
 ): InvoiceData {
   const items: LineItem[] = (invoice.content?.lines || []).map(
     (line, index) => {
-      const vatRate = line.vat_rate || 20;
+      const vatRate = line.vat_rate || 10;
       // Convert total_ttc back to total_ht for frontend
       const totalHT = line.is_section
         ? 0
@@ -437,7 +437,7 @@ export function invoiceToDocumentData(
   const firstLineWithVat = (invoice.content?.lines || []).find(
     (line) => !line.is_section && line.vat_rate,
   );
-  const tvaRate = firstLineWithVat?.vat_rate || company.vat_rate || 20;
+  const tvaRate = firstLineWithVat?.vat_rate || company.vat_rate || 10;
 
   return {
     type: "invoice",

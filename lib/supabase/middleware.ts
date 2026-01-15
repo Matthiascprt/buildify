@@ -29,24 +29,23 @@ export async function updateSession(request: NextRequest) {
   }
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value),
-          );
-          supabaseResponse = NextResponse.next({
-            request,
-          });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options),
-          );
-        },
+    cookies: {
+      getAll() {
+        return request.cookies.getAll();
+      },
+      setAll(cookiesToSet) {
+        cookiesToSet.forEach(({ name, value }) =>
+          request.cookies.set(name, value),
+        );
+        supabaseResponse = NextResponse.next({
+          request,
+        });
+        cookiesToSet.forEach(({ name, value, options }) =>
+          supabaseResponse.cookies.set(name, value, options),
+        );
       },
     },
-  );
+  });
 
   // Refresh the session if expired
   const {
@@ -54,7 +53,14 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   // Protected routes
-  const protectedRoutes = ["/dashboard", "/documents", "/clients", "/settings"];
+  const protectedRoutes = [
+    "/dashboard",
+    "/documents",
+    "/clients",
+    "/settings",
+    "/edition",
+    "/setup",
+  ];
   const isProtectedRoute = protectedRoutes.some((route) =>
     request.nextUrl.pathname.startsWith(route),
   );
@@ -63,6 +69,35 @@ export async function updateSession(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
+  }
+
+  // Check company completeness for authenticated users
+  const isSetupPage = request.nextUrl.pathname.startsWith("/setup");
+  if (isProtectedRoute && user) {
+    const { data: company } = await supabase
+      .from("companies")
+      .select("address, phone, email, siret")
+      .eq("user_id", user.id)
+      .single();
+
+    const isCompanyComplete =
+      company &&
+      company.address &&
+      company.phone &&
+      company.email &&
+      company.siret;
+
+    if (!isCompanyComplete && !isSetupPage) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/setup";
+      return NextResponse.redirect(url);
+    }
+
+    if (isCompanyComplete && isSetupPage) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/dashboard";
+      return NextResponse.redirect(url);
+    }
   }
 
   // Redirect logged-in users away from auth pages

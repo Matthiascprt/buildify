@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { Send, Mic, MicOff } from "lucide-react";
 import { pdf } from "@react-pdf/renderer";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,7 @@ import { Chat, type ChatRef } from "@/components/edition/chat";
 import { DocumentPreview } from "@/components/edition/document-preview";
 import { QuotePDFTemplate } from "@/components/edition/quote-pdf-template";
 import { InvoicePDFTemplate } from "@/components/edition/invoice-pdf-template";
+import { OnboardingTutorial } from "@/components/edition/onboarding-tutorial";
 import type {
   DocumentData,
   LineItem,
@@ -58,7 +60,35 @@ export function EditionClient({
     initialAccentColor,
   );
   const [mobileView, setMobileView] = useState<"chat" | "preview">("chat");
+  const [showTutorial, setShowTutorial] = useState(false);
   const chatRef = useRef<ChatRef>(null);
+  const searchParams = useSearchParams();
+
+  // Check if tutorial should be shown (only after setup, once)
+  useEffect(() => {
+    const fromSetup = searchParams.get("fromSetup") === "true";
+    const forceTutorial = searchParams.get("tutorial") === "1";
+
+    // Force tutorial for testing via ?tutorial=1
+    if (forceTutorial) {
+      localStorage.removeItem("buildify_tutorial_completed");
+      setShowTutorial(true);
+      const url = new URL(window.location.href);
+      url.searchParams.delete("tutorial");
+      window.history.replaceState({}, "", url.toString());
+      return;
+    }
+
+    // Show tutorial after setup - this is the ONLY trigger for the tutorial
+    // Clear any previous flag since setup means fresh start
+    if (fromSetup) {
+      localStorage.removeItem("buildify_tutorial_completed");
+      setShowTutorial(true);
+      const url = new URL(window.location.href);
+      url.searchParams.delete("fromSetup");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, [searchParams]);
 
   // Sync document state when initialDocument changes (e.g., navigating to another document)
   useEffect(() => {
@@ -675,61 +705,69 @@ export function EditionClient({
   const showDocumentPreview = document !== null;
 
   return (
-    <div
-      className={`grid h-full grid-cols-1 ${showDocumentPreview ? "2xl:grid-cols-2" : ""} overflow-hidden`}
-    >
-      {/* Chat - visible on desktop (2xl+), or on smaller screens when mobileView is "chat" */}
-      <div
-        className={`h-full overflow-hidden ${showDocumentPreview ? "2xl:border-r" : ""} ${
-          showDocumentPreview && mobileView === "preview"
-            ? "hidden 2xl:block"
-            : ""
-        }`}
-      >
-        <Chat
-          ref={chatRef}
-          userInitial={userInitial}
-          company={company}
-          clients={clients}
-          document={document}
-          onDocumentChange={handleDocumentChange}
-          nextQuoteNumber={nextQuoteNumber}
-          nextInvoiceNumber={nextInvoiceNumber}
-          isEditingExisting={!!initialDocument}
-          accentColor={accentColor}
-          onAccentColorChange={handleAccentColorChange}
-          onClientCreated={handleClientCreated}
-          onSwitchToPreview={() => setMobileView("preview")}
-          onDownloadPdf={handleDownloadPdf}
-          onConvertToInvoice={handleConvertToInvoice}
+    <>
+      {showTutorial && (
+        <OnboardingTutorial
+          documentType={document?.type}
+          onComplete={() => setShowTutorial(false)}
         />
-      </div>
-
-      {/* Document Preview - visible on desktop (2xl+), or on smaller screens when mobileView is "preview" */}
-      {showDocumentPreview && (
+      )}
+      <div
+        className={`grid h-full grid-cols-1 ${showDocumentPreview ? "2xl:grid-cols-2" : ""} overflow-hidden`}
+      >
+        {/* Chat - visible on desktop (2xl+), or on smaller screens when mobileView is "chat" */}
         <div
-          className={`h-full overflow-hidden ${
-            mobileView === "chat" ? "hidden 2xl:block" : ""
+          className={`h-full overflow-hidden ${showDocumentPreview ? "2xl:border-r" : ""} ${
+            showDocumentPreview && mobileView === "preview"
+              ? "hidden 2xl:block"
+              : ""
           }`}
         >
-          <DocumentPreview
+          <Chat
+            ref={chatRef}
+            userInitial={userInitial}
+            company={company}
+            clients={clients}
             document={document}
-            onDeleteDocument={handleDeleteDocument}
-            onDocumentUpdate={handleDocumentUpdate}
-            onConvertToInvoice={handleConvertToInvoice}
-            onAddLine={handleAddLine}
-            onRemoveLines={handleRemoveLines}
+            onDocumentChange={handleDocumentChange}
+            nextQuoteNumber={nextQuoteNumber}
+            nextInvoiceNumber={nextInvoiceNumber}
+            isEditingExisting={!!initialDocument}
             accentColor={accentColor}
             onAccentColorChange={handleAccentColorChange}
-            clientSyncError={clientSyncError}
-            onClientSyncErrorClear={() => setClientSyncError(null)}
-            isSaving={isSaving}
-            showMobileInput={mobileView === "preview"}
-            mobileInputComponent={mobileInputComponent}
-            onSwitchToChat={() => setMobileView("chat")}
+            onClientCreated={handleClientCreated}
+            onSwitchToPreview={() => setMobileView("preview")}
+            onDownloadPdf={handleDownloadPdf}
+            onConvertToInvoice={handleConvertToInvoice}
           />
         </div>
-      )}
-    </div>
+
+        {/* Document Preview - visible on desktop (2xl+), or on smaller screens when mobileView is "preview" */}
+        {showDocumentPreview && (
+          <div
+            className={`h-full overflow-hidden ${
+              mobileView === "chat" ? "hidden 2xl:block" : ""
+            }`}
+          >
+            <DocumentPreview
+              document={document}
+              onDeleteDocument={handleDeleteDocument}
+              onDocumentUpdate={handleDocumentUpdate}
+              onConvertToInvoice={handleConvertToInvoice}
+              onAddLine={handleAddLine}
+              onRemoveLines={handleRemoveLines}
+              accentColor={accentColor}
+              onAccentColorChange={handleAccentColorChange}
+              clientSyncError={clientSyncError}
+              onClientSyncErrorClear={() => setClientSyncError(null)}
+              isSaving={isSaving}
+              showMobileInput={mobileView === "preview"}
+              mobileInputComponent={mobileInputComponent}
+              onSwitchToChat={() => setMobileView("chat")}
+            />
+          </div>
+        )}
+      </div>
+    </>
   );
 }

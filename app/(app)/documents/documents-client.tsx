@@ -410,17 +410,11 @@ export function DocumentsClient({ initialDocuments }: DocumentsClientProps) {
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <FileText className="h-10 w-10 text-muted-foreground mb-3" />
               <h3 className="font-semibold text-lg mb-2">Aucun document</h3>
-              <p className="text-muted-foreground text-sm mb-4">
+              <p className="text-muted-foreground text-sm">
                 {searchQuery || filterType !== "all"
                   ? "Aucun document ne correspond à votre recherche."
                   : "Créez votre premier devis ou facture pour commencer."}
               </p>
-              {!searchQuery && filterType === "all" && (
-                <Button variant="outline" size="sm" onClick={handleNewDocument}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Créer un document
-                </Button>
-              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 sm:gap-5 lg:gap-6">

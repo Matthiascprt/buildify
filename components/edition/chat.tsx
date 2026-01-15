@@ -494,7 +494,7 @@ export const Chat = forwardRef<ChatRef, ChatProps>(function Chat(
       legalNotice: company?.legal_notice || undefined,
     };
 
-    const defaultTvaRate = company?.vat_rate ?? 20;
+    const defaultTvaRate = company?.vat_rate ?? 10;
 
     let newDocument: DocumentData;
     if (type === "quote") {
@@ -925,6 +925,7 @@ export const Chat = forwardRef<ChatRef, ChatProps>(function Chat(
             size="icon"
             className={cn("shrink-0", isRecording && "animate-pulse")}
             onClick={toggleRecording}
+            data-tour-id="tour-mic-button"
           >
             {isRecording ? (
               <MicOff className="h-4 w-4" />
@@ -939,6 +940,7 @@ export const Chat = forwardRef<ChatRef, ChatProps>(function Chat(
             placeholder="Tapez votre message..."
             className="min-h-10 max-h-32 resize-none"
             rows={1}
+            data-tour-id="tour-chat-input"
           />
           <Button
             type="submit"
