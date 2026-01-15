@@ -12,6 +12,7 @@ import {
   Minus,
   Palette,
   AlertTriangle,
+  MessageSquare,
 } from "lucide-react";
 import { HexColorPicker } from "react-colorful";
 import { pdf } from "@react-pdf/renderer";
@@ -56,11 +57,15 @@ interface DocumentPreviewProps {
   onDocumentUpdate?: (path: string, value: string | number) => void;
   onConvertToInvoice?: () => Promise<{ success: boolean; error?: string }>;
   onAddLine?: () => void;
-  onRemoveLine?: (lineIndex: number) => void;
+  onRemoveLines?: (lineIndices: number[]) => void;
   accentColor?: string | null;
   onAccentColorChange?: (color: string | null) => void;
   clientSyncError?: string | null;
   onClientSyncErrorClear?: () => void;
+  isSaving?: boolean;
+  showMobileInput?: boolean;
+  mobileInputComponent?: React.ReactNode;
+  onSwitchToChat?: () => void;
 }
 
 function mapToQuoteTemplateData(doc: QuoteData) {
@@ -139,11 +144,15 @@ export function DocumentPreview({
   onDocumentUpdate,
   onConvertToInvoice,
   onAddLine,
-  onRemoveLine,
+  onRemoveLines,
   accentColor,
   onAccentColorChange,
   clientSyncError,
   onClientSyncErrorClear,
+  isSaving,
+  showMobileInput,
+  mobileInputComponent,
+  onSwitchToChat,
 }: DocumentPreviewProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -151,6 +160,8 @@ export function DocumentPreview({
   const [isConverting, setIsConverting] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [deleteLineMode, setDeleteLineMode] = useState(false);
+  const [selectedLines, setSelectedLines] = useState<Set<number>>(new Set());
+  const [isDragging, setIsDragging] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showClientSheet, setShowClientSheet] = useState(false);
   const [clientData, setClientData] = useState<Client | null>(null);
@@ -245,9 +256,74 @@ export function DocumentPreview({
     return () => window.removeEventListener("mousedown", handleClickOutside);
   }, [showColorPicker]);
 
+  // Drag-select pour suppression multiple
+  const dragStartLineRef = useRef<number | null>(null);
+
+  const handleLineMouseDown = (lineIndex: number) => {
+    if (deleteLineMode) {
+      dragStartLineRef.current = lineIndex;
+      setIsDragging(false); // Will be set to true only if mouse moves to another line
+    }
+  };
+
+  const handleLineMouseEnter = (lineIndex: number) => {
+    if (
+      deleteLineMode &&
+      dragStartLineRef.current !== null &&
+      dragStartLineRef.current !== lineIndex
+    ) {
+      // Started dragging to another line
+      if (!isDragging) {
+        setIsDragging(true);
+        setSelectedLines(new Set([dragStartLineRef.current, lineIndex]));
+      } else {
+        setSelectedLines((prev) => new Set([...prev, lineIndex]));
+      }
+    }
+  };
+
   const handleLineClick = (lineIndex: number) => {
-    if (deleteLineMode && onRemoveLine) {
-      onRemoveLine(lineIndex);
+    if (deleteLineMode) {
+      // Click simple - sélectionner/désélectionner
+      setSelectedLines((prev) => {
+        const newSet = new Set(prev);
+        if (newSet.has(lineIndex)) {
+          newSet.delete(lineIndex);
+        } else {
+          newSet.add(lineIndex);
+        }
+        return newSet;
+      });
+    }
+  };
+
+  // Gérer le mouseup global pour terminer le drag
+  useEffect(() => {
+    const handleMouseUp = () => {
+      dragStartLineRef.current = null;
+      if (isDragging) {
+        setIsDragging(false);
+      }
+    };
+
+    if (deleteLineMode) {
+      window.addEventListener("mouseup", handleMouseUp);
+    }
+    return () => window.removeEventListener("mouseup", handleMouseUp);
+  }, [deleteLineMode, isDragging]);
+
+  // Reset la sélection quand on quitte le mode suppression
+  useEffect(() => {
+    if (!deleteLineMode) {
+      setSelectedLines(new Set());
+      setIsDragging(false);
+    }
+  }, [deleteLineMode]);
+
+  const handleConfirmDeleteLines = () => {
+    if (selectedLines.size > 0 && onRemoveLines) {
+      onRemoveLines(Array.from(selectedLines));
+      setSelectedLines(new Set());
       setDeleteLineMode(false);
     }
   };
@@ -335,45 +411,83 @@ export function DocumentPreview({
   return (
     <div className="h-full flex flex-col bg-muted/30">
       <div className="border-b px-4 py-3 shrink-0">
-        <div className="flex items-start justify-between">
-          <div>
+        {/* Desktop: single row | Mobile: stacked */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          {/* Title section */}
+          <div className="min-w-0">
             <h2 className="font-semibold">Aperçu du document</h2>
-            <p className="text-sm text-muted-foreground">{getDescription()}</p>
-          </div>
-          {document && (
             <div className="flex items-center gap-2">
+              <p className="text-sm text-muted-foreground truncate">
+                {getDescription()}
+              </p>
+              {isSaving && (
+                <span className="text-xs text-muted-foreground flex items-center gap-1 shrink-0">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Sauvegarde...
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Actions - right side on desktop, below on mobile */}
+          {document && (
+            <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+              {/* Switch to chat button - visible on screens smaller than 2xl */}
+              {onSwitchToChat && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="2xl:hidden h-8 w-8 rounded-full bg-muted hover:bg-muted/80"
+                  onClick={onSwitchToChat}
+                  title="Voir la conversation"
+                >
+                  <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                </Button>
+              )}
               {onAddLine && (
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-9 w-9 rounded-full bg-muted hover:bg-muted/80"
+                  className="h-8 w-8 rounded-full bg-muted hover:bg-muted/80"
                   onClick={onAddLine}
                   title="Ajouter une ligne"
                 >
                   <Plus className="h-4 w-4 text-muted-foreground" />
                 </Button>
               )}
-              {onRemoveLine && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={`h-9 w-9 rounded-full ${deleteLineMode ? "bg-destructive/20 hover:bg-destructive/30" : "bg-muted hover:bg-muted/80"}`}
-                  onClick={() => setDeleteLineMode(!deleteLineMode)}
-                  title={
-                    deleteLineMode
-                      ? "Annuler la suppression"
-                      : "Supprimer une ligne"
-                  }
-                >
-                  <Minus
-                    className={`h-4 w-4 ${deleteLineMode ? "text-destructive" : "text-muted-foreground"}`}
-                  />
-                </Button>
+              {onRemoveLines && (
+                <div className="flex items-center gap-1">
+                  {deleteLineMode && selectedLines.size > 0 && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="h-8 px-3 rounded-full text-xs animate-in fade-in slide-in-from-right-2 duration-200"
+                      onClick={handleConfirmDeleteLines}
+                    >
+                      Supprimer {selectedLines.size}
+                    </Button>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={`h-8 w-8 rounded-full transition-all ${deleteLineMode ? "bg-destructive/20 hover:bg-destructive/30" : "bg-muted hover:bg-muted/80"}`}
+                    onClick={() => setDeleteLineMode(!deleteLineMode)}
+                    title={
+                      deleteLineMode
+                        ? "Annuler la suppression"
+                        : "Supprimer des lignes"
+                    }
+                  >
+                    <Minus
+                      className={`h-4 w-4 ${deleteLineMode ? "text-destructive" : "text-muted-foreground"}`}
+                    />
+                  </Button>
+                </div>
               )}
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-9 w-9 rounded-full bg-muted hover:bg-muted/80"
+                className="h-8 w-8 rounded-full bg-muted hover:bg-muted/80"
                 onClick={handleDownloadPDF}
                 disabled={isGeneratingPDF}
               >
@@ -387,21 +501,24 @@ export function DocumentPreview({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-9 w-9 rounded-full bg-muted hover:bg-muted/80"
+                  className="h-8 w-8 rounded-full bg-muted hover:bg-muted/80"
                   onClick={() => setShowColorPicker(!showColorPicker)}
                   title="Changer la couleur"
                 >
                   <Palette className="h-4 w-4 text-muted-foreground" />
                 </Button>
                 {showColorPicker && (
-                  <div className="absolute right-0 top-full mt-2 z-50 bg-popover border rounded-xl shadow-xl p-3">
+                  <div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-2 z-50 bg-popover border rounded-xl shadow-xl p-4">
+                    <p className="text-sm font-medium mb-3">
+                      Couleur d&apos;accent
+                    </p>
                     <HexColorPicker
                       color={accentColor || "#f5f5f5"}
                       onChange={(color) => onAccentColorChange?.(color)}
-                      style={{ width: "200px", height: "180px" }}
+                      style={{ width: "200px", height: "160px" }}
                     />
                     <button
-                      className="w-full mt-3 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      className="w-full mt-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
                       onClick={() => onAccentColorChange?.(null)}
                     >
                       Réinitialiser
@@ -412,7 +529,11 @@ export function DocumentPreview({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-9 w-9 rounded-full bg-muted hover:bg-muted/80"
+                className={`h-8 w-8 rounded-full ${
+                  document.client?.id
+                    ? "bg-muted hover:bg-muted/80"
+                    : "bg-muted/50 cursor-not-allowed opacity-50"
+                }`}
                 onClick={handleClientButtonClick}
                 disabled={!document.client?.id}
                 title={
@@ -421,13 +542,19 @@ export function DocumentPreview({
                     : "Aucun client lié"
                 }
               >
-                <User className="h-4 w-4 text-muted-foreground" />
+                <User
+                  className={`h-4 w-4 ${
+                    document.client?.id
+                      ? "text-muted-foreground"
+                      : "text-muted-foreground/40"
+                  }`}
+                />
               </Button>
               {document.type === "quote" && onConvertToInvoice && (
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-9 w-9 rounded-full bg-muted hover:bg-muted/80"
+                  className="h-8 w-8 rounded-full bg-muted hover:bg-muted/80"
                   onClick={handleConvertClick}
                   title="Convertir en facture"
                 >
@@ -437,7 +564,7 @@ export function DocumentPreview({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-9 w-9 rounded-full bg-muted hover:bg-muted/80"
+                className="h-8 w-8 rounded-full bg-muted hover:bg-muted/80"
                 onClick={handleDeleteClick}
               >
                 <Trash2 className="h-4 w-4 text-muted-foreground" />
@@ -470,14 +597,40 @@ export function DocumentPreview({
         <div className="absolute inset-0 overflow-y-auto">
           <div className="flex min-h-full items-center justify-center p-4">
             {document === null ? (
-              <div className="flex aspect-210/297 w-full max-w-md flex-col items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/25 bg-background">
-                <FileText className="h-16 w-16 text-muted-foreground/50" />
-                <p className="mt-4 text-lg font-medium text-muted-foreground">
-                  Document A4
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground/70">
-                  Le contenu généré apparaîtra ici
-                </p>
+              <div className="relative w-full max-w-2xl rounded-2xl overflow-hidden">
+                {/* Modern empty state with gradient background */}
+                <div className="relative p-12 bg-gradient-to-br from-orange-50 via-amber-50/50 to-white dark:from-orange-950/20 dark:via-amber-950/10 dark:to-background border border-orange-200/50 dark:border-orange-500/10 rounded-2xl">
+                  {/* Decorative elements */}
+                  <div className="absolute top-0 right-0 w-48 h-48 bg-gradient-to-bl from-orange-200/40 to-transparent dark:from-orange-500/10 rounded-full blur-2xl" />
+                  <div className="absolute bottom-0 left-0 w-40 h-40 bg-gradient-to-tr from-amber-200/30 to-transparent dark:from-amber-500/5 rounded-full blur-2xl" />
+
+                  {/* Content */}
+                  <div className="relative z-10 flex flex-col items-center text-center">
+                    {/* Document icon with gradient ring */}
+                    <div className="relative mb-6">
+                      <div className="absolute -inset-3 bg-gradient-to-r from-orange-400 via-amber-400 to-orange-500 rounded-2xl opacity-20 blur-lg" />
+                      <div className="relative h-20 w-20 rounded-2xl bg-gradient-to-br from-orange-100 to-amber-100 dark:from-orange-900/30 dark:to-amber-900/30 flex items-center justify-center shadow-lg border border-orange-200/50 dark:border-orange-500/20">
+                        <FileText className="h-10 w-10 text-orange-500 dark:text-orange-400" />
+                      </div>
+                    </div>
+
+                    {/* Title */}
+                    <h3 className="text-xl font-semibold mb-2 bg-gradient-to-r from-orange-600 via-amber-600 to-orange-600 dark:from-orange-400 dark:via-amber-400 dark:to-orange-400 bg-clip-text text-transparent">
+                      Votre document apparaîtra ici
+                    </h3>
+                    <p className="text-muted-foreground text-sm max-w-xs">
+                      Créez un devis ou une facture avec Max pour voir
+                      l&apos;aperçu en temps réel
+                    </p>
+
+                    {/* Decorative dots */}
+                    <div className="flex gap-2 mt-8">
+                      <span className="h-2 w-2 rounded-full bg-orange-300 dark:bg-orange-600" />
+                      <span className="h-2 w-2 rounded-full bg-amber-300 dark:bg-amber-600" />
+                      <span className="h-2 w-2 rounded-full bg-orange-300 dark:bg-orange-600" />
+                    </div>
+                  </div>
+                </div>
               </div>
             ) : document.type === "quote" ? (
               <div
@@ -488,7 +641,10 @@ export function DocumentPreview({
                   data={mapToQuoteTemplateData(document)}
                   onUpdate={onDocumentUpdate}
                   deleteMode={deleteLineMode}
+                  selectedLines={selectedLines}
                   onLineClick={handleLineClick}
+                  onLineMouseDown={handleLineMouseDown}
+                  onLineMouseEnter={handleLineMouseEnter}
                   accentColor={accentColor}
                 />
               </div>
@@ -501,7 +657,10 @@ export function DocumentPreview({
                   data={mapToInvoiceTemplateData(document)}
                   onUpdate={onDocumentUpdate}
                   deleteMode={deleteLineMode}
+                  selectedLines={selectedLines}
                   onLineClick={handleLineClick}
+                  onLineMouseDown={handleLineMouseDown}
+                  onLineMouseEnter={handleLineMouseEnter}
                   accentColor={accentColor}
                 />
               </div>
@@ -567,7 +726,7 @@ export function DocumentPreview({
       {/* Dialog fiche client */}
       <Dialog open={showClientSheet} onOpenChange={setShowClientSheet}>
         <DialogContent
-          className="max-w-2xl max-h-[90vh] flex flex-col overflow-hidden p-0"
+          className="sm:max-w-2xl max-h-[90vh] flex flex-col overflow-hidden p-0"
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
           {/* Fixed Header */}
@@ -756,6 +915,13 @@ export function DocumentPreview({
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Input for screens smaller than 2xl */}
+      {showMobileInput && mobileInputComponent && (
+        <div className="2xl:hidden border-t bg-background">
+          {mobileInputComponent}
+        </div>
+      )}
     </div>
   );
 }

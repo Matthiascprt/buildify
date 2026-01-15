@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useTransition, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -70,17 +71,20 @@ import { ClientDocuments } from "@/components/clients/client-documents";
 type ClientType = "particulier" | "professionnel";
 
 export default function ClientsPage() {
+  const searchParams = useSearchParams();
   const [clients, setClients] = useState<Client[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isPending, startTransition] = useTransition();
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(
+    () => searchParams.get("add") === "true",
+  );
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<"all" | ClientType>("all");
   const [sortBy, setSortBy] = useState<"name" | "date">("date");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [deleteMode, setDeleteMode] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
@@ -232,7 +236,7 @@ export default function ClientsPage() {
     setAddErrorMessage(null);
   };
 
-  const toggleSelectClient = (clientId: number) => {
+  const toggleSelectClient = (clientId: string) => {
     setSelectedIds((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(clientId)) {
@@ -306,221 +310,439 @@ export default function ClientsPage() {
       </div>
 
       {/* Controls Bar */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
-        {/* Search */}
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Rechercher un client..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
-          />
+      <div className="space-y-3">
+        {/* Search - full width on all screens, inline on xl+ */}
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Rechercher un client..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+
+          {/* Desktop only: Filter, Sort, Delete, Action button inline with search */}
+          <div className="hidden xl:flex items-center gap-3">
+            <Select
+              value={filterType}
+              onValueChange={(value) =>
+                setFilterType(value as "all" | ClientType)
+              }
+            >
+              <SelectTrigger className="w-[160px]">
+                <SelectValue placeholder="Filtrer par type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tous</SelectItem>
+                <SelectItem value="particulier">Particuliers</SelectItem>
+                <SelectItem value="professionnel">Professionnels</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="min-w-[120px]">
+                  <ArrowUpDown className="h-4 w-4 mr-2" />
+                  Trier
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-[180px] p-2">
+                <div className="flex gap-2 mb-2">
+                  <Button
+                    variant={sortOrder === "asc" ? "default" : "ghost"}
+                    size="sm"
+                    className="flex-1 h-8"
+                    onClick={() => setSortOrder("asc")}
+                  >
+                    <ArrowUp className="h-4 w-4 mr-1" />
+                    Asc
+                  </Button>
+                  <Button
+                    variant={sortOrder === "desc" ? "default" : "ghost"}
+                    size="sm"
+                    className="flex-1 h-8"
+                    onClick={() => setSortOrder("desc")}
+                  >
+                    <ArrowDown className="h-4 w-4 mr-1" />
+                    Desc
+                  </Button>
+                </div>
+                <DropdownMenuSeparator className="mx-0" />
+                <DropdownMenuItem
+                  onClick={() => setSortBy("name")}
+                  className="mt-1"
+                >
+                  {sortBy === "name" && <Check className="h-4 w-4 mr-2" />}
+                  <span className={sortBy !== "name" ? "ml-6" : ""}>Nom</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setSortBy("date")}>
+                  {sortBy === "date" && <Check className="h-4 w-4 mr-2" />}
+                  <span className={sortBy !== "date" ? "ml-6" : ""}>Date</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {deleteMode ? (
+              <Button variant="outline" size="icon" onClick={exitDeleteMode}>
+                <X className="h-4 w-4" />
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setDeleteMode(true)}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
+
+            {deleteMode && selectedIds.size > 0 ? (
+              <Button
+                variant="destructive"
+                onClick={() => setShowDeleteConfirm(true)}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Supprimer ({selectedIds.size})
+              </Button>
+            ) : (
+              <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
+                <DialogTrigger asChild>
+                  <Button>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Nouveau client
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Ajouter un client</DialogTitle>
+                    <DialogDescription>
+                      Remplissez les informations du nouveau client.
+                    </DialogDescription>
+                  </DialogHeader>
+                  {addErrorMessage && (
+                    <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-600 dark:text-amber-400">
+                      <AlertTriangle className="h-4 w-4 shrink-0" />
+                      <span className="text-sm">{addErrorMessage}</span>
+                    </div>
+                  )}
+                  <div className="grid gap-4 py-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="add_last_name">Nom</Label>
+                        <Input
+                          id="add_last_name"
+                          placeholder="Dupont"
+                          value={formData.last_name}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              last_name: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="add_first_name">Prénom</Label>
+                        <Input
+                          id="add_first_name"
+                          placeholder="Jean"
+                          value={formData.first_name}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              first_name: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="add_email">Email</Label>
+                      <Input
+                        id="add_email"
+                        type="email"
+                        placeholder="jean.dupont@example.com"
+                        value={formData.email}
+                        onChange={(e) =>
+                          setFormData({ ...formData, email: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="add_phone">Téléphone</Label>
+                      <Input
+                        id="add_phone"
+                        type="tel"
+                        placeholder="06 12 34 56 78"
+                        value={formData.phone}
+                        onChange={(e) =>
+                          setFormData({ ...formData, phone: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="add_type">Type</Label>
+                      <Select
+                        value={formData.type}
+                        onValueChange={(value) =>
+                          setFormData({
+                            ...formData,
+                            type: value as ClientType,
+                          })
+                        }
+                      >
+                        <SelectTrigger id="add_type" className="w-full">
+                          <SelectValue placeholder="Sélectionner un type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="particulier">
+                            Particulier
+                          </SelectItem>
+                          <SelectItem value="professionnel">
+                            Professionnel
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        resetForm();
+                        setIsAddModalOpen(false);
+                      }}
+                    >
+                      Annuler
+                    </Button>
+                    <Button onClick={handleAddClient} disabled={isPending}>
+                      {isPending && (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      )}
+                      Ajouter
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            )}
+          </div>
         </div>
 
-        {/* Filter */}
-        <Select
-          value={filterType}
-          onValueChange={(value) => setFilterType(value as "all" | ClientType)}
-        >
-          <SelectTrigger className="w-full sm:w-[160px]">
-            <SelectValue placeholder="Filtrer par type" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Tous</SelectItem>
-            <SelectItem value="particulier">Particuliers</SelectItem>
-            <SelectItem value="professionnel">Professionnels</SelectItem>
-          </SelectContent>
-        </Select>
+        {/* Mobile/Tablet: Filter, Sort, Delete row */}
+        <div className="flex xl:hidden items-center gap-3">
+          <Select
+            value={filterType}
+            onValueChange={(value) =>
+              setFilterType(value as "all" | ClientType)
+            }
+          >
+            <SelectTrigger className="flex-1">
+              <SelectValue placeholder="Filtrer" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tous</SelectItem>
+              <SelectItem value="particulier">Particuliers</SelectItem>
+              <SelectItem value="professionnel">Professionnels</SelectItem>
+            </SelectContent>
+          </Select>
 
-        {/* Sort */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="flex-1">
+                <ArrowUpDown className="h-4 w-4 mr-2" />
+                Tri
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-[180px] p-2">
+              <div className="flex gap-2 mb-2">
+                <Button
+                  variant={sortOrder === "asc" ? "default" : "ghost"}
+                  size="sm"
+                  className="flex-1 h-8"
+                  onClick={() => setSortOrder("asc")}
+                >
+                  <ArrowUp className="h-4 w-4 mr-1" />
+                  Asc
+                </Button>
+                <Button
+                  variant={sortOrder === "desc" ? "default" : "ghost"}
+                  size="sm"
+                  className="flex-1 h-8"
+                  onClick={() => setSortOrder("desc")}
+                >
+                  <ArrowDown className="h-4 w-4 mr-1" />
+                  Desc
+                </Button>
+              </div>
+              <DropdownMenuSeparator className="mx-0" />
+              <DropdownMenuItem
+                onClick={() => setSortBy("name")}
+                className="mt-1"
+              >
+                {sortBy === "name" && <Check className="h-4 w-4 mr-2" />}
+                <span className={sortBy !== "name" ? "ml-6" : ""}>Nom</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setSortBy("date")}>
+                {sortBy === "date" && <Check className="h-4 w-4 mr-2" />}
+                <span className={sortBy !== "date" ? "ml-6" : ""}>Date</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {deleteMode ? (
             <Button
               variant="outline"
-              className="w-full sm:w-auto sm:min-w-[140px]"
+              size="icon"
+              onClick={exitDeleteMode}
+              className="shrink-0"
             >
-              <ArrowUpDown className="h-4 w-4 mr-2" />
-              Trier
+              <X className="h-4 w-4" />
             </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-[180px] p-2">
-            <div className="flex gap-2 mb-2">
-              <Button
-                variant={sortOrder === "asc" ? "default" : "ghost"}
-                size="sm"
-                className="flex-1 h-8"
-                onClick={() => setSortOrder("asc")}
-              >
-                <ArrowUp className="h-4 w-4 mr-1" />
-                Asc
-              </Button>
-              <Button
-                variant={sortOrder === "desc" ? "default" : "ghost"}
-                size="sm"
-                className="flex-1 h-8"
-                onClick={() => setSortOrder("desc")}
-              >
-                <ArrowDown className="h-4 w-4 mr-1" />
-                Desc
-              </Button>
-            </div>
-            <DropdownMenuSeparator className="mx-0" />
-            <DropdownMenuItem
-              onClick={() => setSortBy("name")}
-              className="mt-1"
+          ) : (
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setDeleteMode(true)}
+              className="shrink-0"
             >
-              {sortBy === "name" && <Check className="h-4 w-4 mr-2" />}
-              <span className={sortBy !== "name" ? "ml-6" : ""}>Nom</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setSortBy("date")}>
-              {sortBy === "date" && <Check className="h-4 w-4 mr-2" />}
-              <span className={sortBy !== "date" ? "ml-6" : ""}>Date</span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
 
-        {/* Delete Mode Toggle */}
-        {deleteMode ? (
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={exitDeleteMode}
-            className="shrink-0"
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        ) : (
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => setDeleteMode(true)}
-            className="shrink-0"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        )}
-
-        {/* New Client / Delete Button */}
-        {deleteMode && selectedIds.size > 0 ? (
-          <Button
-            variant="destructive"
-            className="w-full sm:w-auto"
-            onClick={() => setShowDeleteConfirm(true)}
-          >
-            <Trash2 className="h-4 w-4 mr-2" />
-            Supprimer ({selectedIds.size})
-          </Button>
-        ) : (
-          <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
-            <DialogTrigger asChild>
-              <Button className="w-full sm:w-auto">
-                <Plus className="h-4 w-4 mr-2" />
-                Nouveau client
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Ajouter un client</DialogTitle>
-                <DialogDescription>
-                  Remplissez les informations du nouveau client.
-                </DialogDescription>
-              </DialogHeader>
-              {addErrorMessage && (
-                <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-600 dark:text-amber-400">
-                  <AlertTriangle className="h-4 w-4 shrink-0" />
-                  <span className="text-sm">{addErrorMessage}</span>
-                </div>
-              )}
-              <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-2 gap-4">
+        {/* Mobile/Tablet: Action button full width */}
+        <div className="xl:hidden">
+          {deleteMode && selectedIds.size > 0 ? (
+            <Button
+              variant="destructive"
+              className="w-full"
+              onClick={() => setShowDeleteConfirm(true)}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Supprimer ({selectedIds.size})
+            </Button>
+          ) : (
+            <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
+              <DialogTrigger asChild>
+                <Button className="w-full">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Nouveau client
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Ajouter un client</DialogTitle>
+                  <DialogDescription>
+                    Remplissez les informations du nouveau client.
+                  </DialogDescription>
+                </DialogHeader>
+                {addErrorMessage && (
+                  <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-600 dark:text-amber-400">
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                    <span className="text-sm">{addErrorMessage}</span>
+                  </div>
+                )}
+                <div className="grid gap-4 py-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="add_last_name_mobile">Nom</Label>
+                      <Input
+                        id="add_last_name_mobile"
+                        placeholder="Dupont"
+                        value={formData.last_name}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            last_name: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="add_first_name_mobile">Prénom</Label>
+                      <Input
+                        id="add_first_name_mobile"
+                        placeholder="Jean"
+                        value={formData.first_name}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            first_name: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
                   <div className="space-y-2">
-                    <Label htmlFor="add_last_name">Nom</Label>
+                    <Label htmlFor="add_email_mobile">Email</Label>
                     <Input
-                      id="add_last_name"
-                      placeholder="Dupont"
-                      value={formData.last_name}
+                      id="add_email_mobile"
+                      type="email"
+                      placeholder="jean.dupont@example.com"
+                      value={formData.email}
                       onChange={(e) =>
-                        setFormData({ ...formData, last_name: e.target.value })
+                        setFormData({ ...formData, email: e.target.value })
                       }
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="add_first_name">Prénom</Label>
+                    <Label htmlFor="add_phone_mobile">Téléphone</Label>
                     <Input
-                      id="add_first_name"
-                      placeholder="Jean"
-                      value={formData.first_name}
+                      id="add_phone_mobile"
+                      type="tel"
+                      placeholder="06 12 34 56 78"
+                      value={formData.phone}
                       onChange={(e) =>
-                        setFormData({ ...formData, first_name: e.target.value })
+                        setFormData({ ...formData, phone: e.target.value })
                       }
                     />
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="add_type_mobile">Type</Label>
+                    <Select
+                      value={formData.type}
+                      onValueChange={(value) =>
+                        setFormData({
+                          ...formData,
+                          type: value as ClientType,
+                        })
+                      }
+                    >
+                      <SelectTrigger id="add_type_mobile" className="w-full">
+                        <SelectValue placeholder="Sélectionner un type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="particulier">Particulier</SelectItem>
+                        <SelectItem value="professionnel">
+                          Professionnel
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="add_email">Email</Label>
-                  <Input
-                    id="add_email"
-                    type="email"
-                    placeholder="jean.dupont@example.com"
-                    value={formData.email}
-                    onChange={(e) =>
-                      setFormData({ ...formData, email: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="add_phone">Téléphone</Label>
-                  <Input
-                    id="add_phone"
-                    type="tel"
-                    placeholder="06 12 34 56 78"
-                    value={formData.phone}
-                    onChange={(e) =>
-                      setFormData({ ...formData, phone: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="add_type">Type</Label>
-                  <Select
-                    value={formData.type}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, type: value as ClientType })
-                    }
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      resetForm();
+                      setIsAddModalOpen(false);
+                    }}
                   >
-                    <SelectTrigger id="add_type" className="w-full">
-                      <SelectValue placeholder="Sélectionner un type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="particulier">Particulier</SelectItem>
-                      <SelectItem value="professionnel">
-                        Professionnel
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    resetForm();
-                    setIsAddModalOpen(false);
-                  }}
-                >
-                  Annuler
-                </Button>
-                <Button onClick={handleAddClient} disabled={isPending}>
-                  {isPending && (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  )}
-                  Ajouter
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        )}
+                    Annuler
+                  </Button>
+                  <Button onClick={handleAddClient} disabled={isPending}>
+                    {isPending && (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    )}
+                    Ajouter
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
+        </div>
       </div>
 
       {/* Clients Card */}
@@ -579,7 +801,7 @@ export default function ClientsPage() {
         onOpenChange={(open) => !open && setSelectedClient(null)}
       >
         <DialogContent
-          className="max-w-2xl max-h-[90vh] flex flex-col overflow-hidden p-0"
+          className="sm:max-w-2xl max-h-[90vh] flex flex-col overflow-hidden p-0"
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
           {selectedClient && (
@@ -589,7 +811,7 @@ export default function ClientsPage() {
                 <DialogHeader className="pr-8">
                   <DialogTitle className="flex items-center gap-3">
                     <Avatar className="h-11 w-11">
-                      <AvatarFallback className="bg-primary/10 text-primary text-sm">
+                      <AvatarFallback className="text-sm bg-orange-50 dark:bg-orange-950/20 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-900">
                         {`${selectedClient.first_name?.charAt(0) ?? ""}${selectedClient.last_name?.charAt(0) ?? ""}`.toUpperCase() ||
                           "?"}
                       </AvatarFallback>
@@ -816,7 +1038,7 @@ function ClientRow({
       )}
       {/* Avatar */}
       <Avatar className="h-12 w-12 shrink-0">
-        <AvatarFallback className="bg-primary/10 text-primary text-sm font-medium">
+        <AvatarFallback className="text-sm font-medium bg-orange-50 dark:bg-orange-950/20 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-900">
           {initials}
         </AvatarFallback>
       </Avatar>

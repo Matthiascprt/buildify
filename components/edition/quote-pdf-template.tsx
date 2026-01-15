@@ -248,6 +248,7 @@ const formatPrice = (value: number | undefined): string => {
 };
 
 interface LineItem {
+  lineId: string;
   id: string;
   designation: string;
   description?: string;
@@ -405,9 +406,9 @@ export function QuotePDFTemplate({ data, accentColor }: QuotePDFTemplateProps) {
               Total TTC
             </Text>
           </View>
-          {data.items.map((item, index) => (
+          {data.items.map((item) => (
             <View
-              key={`${item.id}-${index}`}
+              key={item.lineId}
               style={item.isSection ? styles.tableSectionRow : styles.tableRow}
             >
               <Text

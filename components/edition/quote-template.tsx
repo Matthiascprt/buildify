@@ -27,6 +27,7 @@ function getContrastColor(bgColor: string): string {
 }
 
 interface LineItem {
+  lineId: string;
   id: string;
   designation: string;
   description?: string;
@@ -94,12 +95,14 @@ const defaultData: QuoteData = {
   projectTitle: "Rénovation de la cuisine",
   items: [
     {
+      lineId: "example-section-1",
       id: "1",
       designation: "Démolition et préparation",
       isSection: true,
       sectionTotal: 360,
     },
     {
+      lineId: "example-line-1",
       id: "1.1",
       designation: "Dépose carrelage mural",
       description:
@@ -110,6 +113,7 @@ const defaultData: QuoteData = {
       total: 180,
     },
     {
+      lineId: "example-line-2",
       id: "1.2",
       designation: "Dépose carrelage mural",
       description:
@@ -152,7 +156,10 @@ interface QuoteTemplateProps {
   data?: QuoteData;
   onUpdate?: (path: UpdatePath, value: string | number) => void;
   deleteMode?: boolean;
+  selectedLines?: Set<number>;
   onLineClick?: (lineIndex: number) => void;
+  onLineMouseDown?: (lineIndex: number) => void;
+  onLineMouseEnter?: (lineIndex: number) => void;
   accentColor?: string | null;
 }
 
@@ -160,7 +167,10 @@ export function QuoteTemplate({
   data = defaultData,
   onUpdate,
   deleteMode = false,
+  selectedLines = new Set(),
   onLineClick,
+  onLineMouseDown,
+  onLineMouseEnter,
   accentColor,
 }: QuoteTemplateProps) {
   const hasCustomColor = accentColor !== null && accentColor !== undefined;
@@ -168,6 +178,18 @@ export function QuoteTemplate({
   const handleUpdate = (path: UpdatePath, value: string | number) => {
     if (onUpdate) {
       onUpdate(path, value);
+    }
+  };
+
+  const handleRowMouseDown = (index: number) => {
+    if (deleteMode && onLineMouseDown) {
+      onLineMouseDown(index);
+    }
+  };
+
+  const handleRowMouseEnter = (index: number) => {
+    if (deleteMode && onLineMouseEnter) {
+      onLineMouseEnter(index);
     }
   };
 
@@ -180,7 +202,7 @@ export function QuoteTemplate({
   return (
     <div className="w-full max-w-[210mm] mx-auto bg-card text-card-foreground p-8 text-sm font-sans">
       {/* Header */}
-      <div className="flex justify-between items-start mb-8">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-8">
         {data.company.logoUrl ? (
           <Image
             src={data.company.logoUrl}
@@ -195,7 +217,7 @@ export function QuoteTemplate({
             LOGO
           </div>
         )}
-        <div className="text-right">
+        <div className="sm:text-right">
           <h1 className="text-xl font-bold">Devis n° {data.number}</h1>
           <p className="text-muted-foreground">Réalisé le {data.date}</p>
           <p className="text-muted-foreground">
@@ -261,139 +283,153 @@ export function QuoteTemplate({
 
       {/* Items Table */}
       <div className="border border-border rounded-lg overflow-hidden mb-4">
-        <table className="w-full">
-          <thead>
-            <tr
-              className={!hasCustomColor ? "bg-muted" : ""}
-              style={
-                hasCustomColor
-                  ? { backgroundColor: accentColor, color: textColor }
-                  : undefined
-              }
-            >
-              <th
-                className={`px-3 py-2 font-semibold ${!hasCustomColor ? "text-muted-foreground" : ""}`}
-              >
-                #
-              </th>
-              <th
-                className={`px-3 py-2 font-semibold ${!hasCustomColor ? "text-muted-foreground" : ""}`}
-              >
-                Désignation
-              </th>
-              <th
-                className={`px-3 py-2 font-semibold text-center ${!hasCustomColor ? "text-muted-foreground" : ""}`}
-              >
-                Quantité
-              </th>
-              <th
-                className={`px-3 py-2 font-semibold text-center ${!hasCustomColor ? "text-muted-foreground" : ""}`}
-              >
-                Prix unitaire HT
-              </th>
-              <th
-                className={`px-3 py-2 font-semibold text-center ${!hasCustomColor ? "text-muted-foreground" : ""}`}
-              >
-                TVA
-              </th>
-              <th
-                className={`px-3 py-2 font-semibold text-right ${!hasCustomColor ? "text-muted-foreground" : ""}`}
-              >
-                Total TTC
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.items.map((item, index) => (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[600px]">
+            <thead>
               <tr
-                key={`${item.id}-${index}`}
-                className={`border-t border-border ${deleteMode ? "cursor-pointer hover:bg-destructive/10 transition-colors" : ""}`}
-                onClick={() => handleRowClick(index)}
+                className={!hasCustomColor ? "bg-muted" : ""}
+                style={
+                  hasCustomColor
+                    ? { backgroundColor: accentColor, color: textColor }
+                    : undefined
+                }
               >
-                {item.isSection ? (
-                  <>
-                    <td className="px-3 py-2 font-bold">{item.id}</td>
-                    <td className="px-3 py-2 font-bold">
-                      <EditableField
-                        value={item.designation}
-                        onSave={(v) =>
-                          handleUpdate(`items.${index}.designation`, v)
-                        }
-                      />
-                    </td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td className="px-3 py-2 font-bold text-right">
-                      {formatPrice(item.sectionTotalTTC ?? item.sectionTotal)} €
-                    </td>
-                  </>
-                ) : (
-                  <>
-                    <td className="px-3 py-2 text-muted-foreground">
-                      {item.id}
-                    </td>
-                    <td className="px-3 py-2">
-                      <div className="font-medium">
+                <th
+                  className={`px-3 py-2 font-semibold whitespace-nowrap ${!hasCustomColor ? "text-muted-foreground" : ""}`}
+                >
+                  #
+                </th>
+                <th
+                  className={`px-3 py-2 font-semibold ${!hasCustomColor ? "text-muted-foreground" : ""}`}
+                >
+                  Désignation
+                </th>
+                <th
+                  className={`px-3 py-2 font-semibold text-center whitespace-nowrap ${!hasCustomColor ? "text-muted-foreground" : ""}`}
+                >
+                  Quantité
+                </th>
+                <th
+                  className={`px-3 py-2 font-semibold text-center whitespace-nowrap ${!hasCustomColor ? "text-muted-foreground" : ""}`}
+                >
+                  Prix unit. HT
+                </th>
+                <th
+                  className={`px-3 py-2 font-semibold text-center whitespace-nowrap ${!hasCustomColor ? "text-muted-foreground" : ""}`}
+                >
+                  TVA
+                </th>
+                <th
+                  className={`px-3 py-2 font-semibold text-right whitespace-nowrap ${!hasCustomColor ? "text-muted-foreground" : ""}`}
+                >
+                  Total TTC
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.items.map((item, index) => (
+                <tr
+                  key={item.lineId}
+                  className={`border-t border-border select-none ${
+                    deleteMode
+                      ? selectedLines.has(index)
+                        ? "bg-destructive/20 cursor-pointer"
+                        : "cursor-pointer hover:bg-destructive/10"
+                      : ""
+                  } transition-colors`}
+                  onClick={() => handleRowClick(index)}
+                  onMouseDown={() => handleRowMouseDown(index)}
+                  onMouseEnter={() => handleRowMouseEnter(index)}
+                >
+                  {item.isSection ? (
+                    <>
+                      <td className="px-3 py-2 font-bold">{item.id}</td>
+                      <td className="px-3 py-2 font-bold">
                         <EditableField
                           value={item.designation}
                           onSave={(v) =>
                             handleUpdate(`items.${index}.designation`, v)
                           }
-                          placeholder="Désignation"
                         />
-                      </div>
-                      <div className="text-xs text-muted-foreground">
+                      </td>
+                      <td></td>
+                      <td></td>
+                      <td></td>
+                      <td className="px-3 py-2 font-bold text-right">
+                        {formatPrice(item.sectionTotalTTC ?? item.sectionTotal)}{" "}
+                        €
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td className="px-3 py-2 text-muted-foreground">
+                        {item.id}
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="font-medium">
+                          <EditableField
+                            value={item.designation}
+                            onSave={(v) =>
+                              handleUpdate(`items.${index}.designation`, v)
+                            }
+                            placeholder="Désignation"
+                          />
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          <EditableField
+                            value={item.description}
+                            onSave={(v) =>
+                              handleUpdate(`items.${index}.description`, v)
+                            }
+                            placeholder="Description"
+                          />
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 text-center text-muted-foreground">
                         <EditableField
-                          value={item.description}
+                          value={item.quantity}
                           onSave={(v) =>
-                            handleUpdate(`items.${index}.description`, v)
+                            handleUpdate(`items.${index}.quantity`, v)
                           }
-                          placeholder="Description"
                         />
-                      </div>
-                    </td>
-                    <td className="px-3 py-2 text-center text-muted-foreground">
-                      <EditableField
-                        value={item.quantity}
-                        onSave={(v) =>
-                          handleUpdate(`items.${index}.quantity`, v)
-                        }
-                      />
-                    </td>
-                    <td className="px-3 py-2 text-center text-muted-foreground">
-                      <EditableField
-                        value={formatPrice(item.unitPrice)}
-                        onSave={(v) =>
-                          handleUpdate(
-                            `items.${index}.unitPrice`,
-                            parseFloat(v) || 0,
-                          )
-                        }
-                        suffix=" €"
-                      />
-                    </td>
-                    <td className="px-3 py-2 text-center text-muted-foreground">
-                      <EditableField
-                        value={item.tva}
-                        onSave={(v) =>
-                          handleUpdate(`items.${index}.tva`, parseFloat(v) || 0)
-                        }
-                        suffix="%"
-                      />
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      {formatPrice(
-                        (item.total || 0) * (1 + (item.tva || 0) / 100),
-                      )}{" "}
-                      €
-                    </td>
-                  </>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                      </td>
+                      <td className="px-3 py-2 text-center text-muted-foreground">
+                        <EditableField
+                          value={formatPrice(item.unitPrice)}
+                          onSave={(v) =>
+                            handleUpdate(
+                              `items.${index}.unitPrice`,
+                              parseFloat(v) || 0,
+                            )
+                          }
+                          suffix=" €"
+                        />
+                      </td>
+                      <td className="px-3 py-2 text-center text-muted-foreground">
+                        <EditableField
+                          value={item.tva}
+                          onSave={(v) =>
+                            handleUpdate(
+                              `items.${index}.tva`,
+                              parseFloat(v) || 0,
+                            )
+                          }
+                          suffix="%"
+                        />
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        {formatPrice(
+                          (item.total || 0) * (1 + (item.tva || 0) / 100),
+                        )}{" "}
+                        €
+                      </td>
+                    </>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Totals */}

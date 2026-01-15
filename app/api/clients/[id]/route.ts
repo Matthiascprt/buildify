@@ -31,10 +31,9 @@ export async function GET(
       );
     }
 
-    const { id } = await params;
-    const clientId = parseInt(id, 10);
+    const { id: clientId } = await params;
 
-    if (isNaN(clientId)) {
+    if (!clientId) {
       return NextResponse.json(
         { error: "ID client invalide" },
         { status: 400 },

@@ -1,13 +1,26 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Mic, MicOff, UserPlus, Plus } from "lucide-react";
+import {
+  Send,
+  Mic,
+  MicOff,
+  UserPlus,
+  Plus,
+  FileCheck,
+  FilePenLine,
+  Eye,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import type { DocumentData, DocumentCompany } from "@/lib/types/document";
-import { createEmptyQuote, createEmptyInvoice } from "@/lib/types/document";
+import {
+  createEmptyQuote,
+  createEmptyInvoice,
+  documentDataToContent,
+} from "@/lib/types/document";
 import type { Company, Client } from "@/lib/supabase/types";
 import { ClientPickerModal } from "./client-picker-modal";
 import { NewClientModal } from "./new-client-modal";
@@ -27,8 +40,10 @@ interface ChatProps {
   nextQuoteNumber: string;
   nextInvoiceNumber: string;
   isEditingExisting?: boolean;
+  accentColor?: string | null;
   onAccentColorChange?: (color: string | null) => void;
   onClientCreated?: (client: Client) => void;
+  onSwitchToPreview?: () => void;
 }
 
 export function Chat({
@@ -40,8 +55,10 @@ export function Chat({
   nextQuoteNumber,
   nextInvoiceNumber,
   isEditingExisting: initialIsEditingExisting = false,
+  accentColor,
   onAccentColorChange,
   onClientCreated,
+  onSwitchToPreview,
 }: ChatProps) {
   const [isEditingExisting, setIsEditingExisting] = useState(
     initialIsEditingExisting,
@@ -71,9 +88,11 @@ export function Chat({
   const [isRecording, setIsRecording] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const retryCountRef = useRef(0);
+  const maxRetries = 3;
 
   // Speech recognition setup
-  const startRecording = useCallback(() => {
+  const startRecording = useCallback((isRetry = false) => {
     if (
       !("webkitSpeechRecognition" in window) &&
       !("SpeechRecognition" in window)
@@ -82,6 +101,11 @@ export function Chat({
         "La reconnaissance vocale n'est pas supportée par votre navigateur.",
       );
       return;
+    }
+
+    // Reset retry count if not a retry
+    if (!isRetry) {
+      retryCountRef.current = 0;
     }
 
     const SpeechRecognitionAPI =
@@ -94,6 +118,8 @@ export function Chat({
 
     recognition.onstart = () => {
       setIsRecording(true);
+      // Reset retry count on successful start
+      retryCountRef.current = 0;
     };
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
@@ -113,11 +139,35 @@ export function Chat({
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
       console.error("Speech recognition error:", event.error);
+
+      // Handle recoverable errors with retry
+      if (event.error === "network" || event.error === "aborted") {
+        if (retryCountRef.current < maxRetries) {
+          retryCountRef.current++;
+          console.log(
+            `Retrying speech recognition (${retryCountRef.current}/${maxRetries})...`,
+          );
+          // Wait a bit before retrying
+          setTimeout(() => {
+            if (recognitionRef.current) {
+              recognitionRef.current = null;
+              startRecording(true);
+            }
+          }, 500);
+          return;
+        }
+      }
+
+      // For non-recoverable errors or max retries reached, stop
       setIsRecording(false);
+      recognitionRef.current = null;
     };
 
     recognition.onend = () => {
-      setIsRecording(false);
+      // Only set recording to false if we're not in a retry cycle
+      if (retryCountRef.current === 0 || retryCountRef.current >= maxRetries) {
+        setIsRecording(false);
+      }
     };
 
     recognitionRef.current = recognition;
@@ -141,8 +191,10 @@ export function Chat({
   }, [isRecording, startRecording, stopRecording]);
 
   // Show client picker button when document exists and no client is linked
+  // Check both id AND name to ensure client is properly linked
+  const hasClientLinked = document?.client?.id || document?.client?.name;
   const shouldShowClientButton =
-    document !== null && !document.client?.id && !isEditingExisting;
+    document !== null && !hasClientLinked && !isEditingExisting;
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -209,6 +261,7 @@ export function Chat({
           clients,
           nextQuoteNumber,
           nextInvoiceNumber,
+          accentColor,
           isFirstMessage: isFirstUserMessage,
         }),
       });
@@ -235,6 +288,42 @@ export function Chat({
         // Handle new client created by AI
         if (data.newClient && onClientCreated) {
           onClientCreated(data.newClient);
+        }
+
+        // Handle validity date update for quotes
+        if (
+          data.validityUpdate &&
+          data.document?.id &&
+          data.document?.type === "quote"
+        ) {
+          try {
+            await fetch(`/api/documents?id=${data.document.id}&type=quote`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                valid_until: data.validityUpdate.validUntil,
+              }),
+            });
+          } catch (error) {
+            console.error("Failed to update validity date:", error);
+          }
+        }
+
+        // Handle due date update for invoices
+        if (
+          data.dueDateUpdate &&
+          data.document?.id &&
+          data.document?.type === "invoice"
+        ) {
+          try {
+            await fetch(`/api/documents?id=${data.document.id}&type=invoice`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ due_date: data.dueDateUpdate.dueDateDb }),
+            });
+          } catch (error) {
+            console.error("Failed to update due date:", error);
+          }
         }
       } else {
         const errorMessage: Message = {
@@ -273,28 +362,11 @@ export function Chat({
   };
 
   const handleClientSelect = async (client: Client) => {
-    if (!document || !document.id) return;
+    if (!document) return;
 
     const clientName = [client.first_name, client.last_name]
       .filter(Boolean)
       .join(" ");
-
-    // Update client_id in database
-    try {
-      await fetch("/api/documents", {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          documentId: document.id,
-          type: document.type,
-          clientId: client.id,
-        }),
-      });
-    } catch (error) {
-      console.error("Error linking client to document:", error);
-    }
 
     // Update document with client info
     const updatedDocument: DocumentData = {
@@ -308,6 +380,20 @@ export function Chat({
         email: client.email || "",
       },
     };
+
+    // Update client_id in database if document has an ID
+    if (document.id) {
+      const type = document.type === "quote" ? "quote" : "invoice";
+      try {
+        await fetch(`/api/documents?id=${document.id}&type=${type}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ client_id: client.id }),
+        });
+      } catch (error) {
+        console.error("Failed to update client:", error);
+      }
+    }
 
     onDocumentChange(updatedDocument);
 
@@ -362,33 +448,51 @@ export function Chat({
       );
     }
 
+    // Save document to database
     try {
-      // Create document in database
+      const content = documentDataToContent(newDocument);
+
+      const requestBody = {
+        type,
+        client_id: null,
+        number: newDocument.number,
+        ...(type === "quote"
+          ? {
+              valid_until: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+                .toISOString()
+                .split("T")[0],
+            }
+          : {
+              due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+                .toISOString()
+                .split("T")[0],
+            }),
+        content,
+        color: null,
+      };
+
+      console.log("[DEBUG] Creating document:", requestBody);
+
       const response = await fetch("/api/documents", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          type,
-          content: newDocument,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
       });
 
-      const data = await response.json();
+      const responseData = await response.json();
+      console.log("[DEBUG] API response:", response.status, responseData);
 
-      if (response.ok && data.success) {
-        // Update document with database ID and generated number
+      if (response.ok && responseData.document) {
         newDocument = {
           ...newDocument,
-          id: data.document.id,
-          number: data.documentNumber,
+          id: responseData.document.id,
         };
+        console.log("[DEBUG] Document created with ID:", newDocument.id);
       } else {
-        console.error("Failed to create document in database:", data.error);
+        console.error("[DEBUG] Failed to create document:", responseData.error);
       }
     } catch (error) {
-      console.error("Error creating document:", error);
+      console.error("[DEBUG] Failed to save document:", error);
     }
 
     onDocumentChange(newDocument);
@@ -419,6 +523,187 @@ export function Chat({
     setIsLoading(false);
   };
 
+  // Welcome screen shown only on initial state (no document, no interaction)
+  const showWelcomeScreen = showQuickActions && !document;
+
+  if (showWelcomeScreen) {
+    return (
+      <div className="relative h-full flex flex-col overflow-hidden bg-linear-to-b from-background via-background to-orange-50/30 dark:to-orange-950/10">
+        {/* Animated background elements */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute -top-40 -right-40 w-[500px] h-[500px] bg-linear-to-br from-orange-400/20 via-amber-300/15 to-transparent rounded-full blur-3xl" />
+          <div className="absolute -bottom-40 -left-40 w-[400px] h-[400px] bg-linear-to-tr from-amber-400/15 via-orange-300/10 to-transparent rounded-full blur-3xl" />
+        </div>
+
+        {/* Main content */}
+        <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-6 py-12">
+          <div className="w-full max-w-3xl mx-auto">
+            {/* Hero section */}
+            <div className="text-center mb-12">
+              {/* Max Avatar - larger and more prominent */}
+              <div className="relative inline-block mb-8">
+                <div className="absolute -inset-6 bg-linear-to-r from-orange-500/30 via-amber-400/20 to-orange-500/30 rounded-full blur-2xl animate-pulse" />
+                <div className="relative">
+                  <Avatar className="h-28 w-28 ring-[3px] ring-white dark:ring-neutral-800 shadow-2xl shadow-orange-500/20">
+                    <AvatarImage
+                      src="https://ckvcijpgohqlnvoinwmc.supabase.co/storage/v1/object/public/buildify-assets/Logo/Agent%20IA.png"
+                      alt="Max"
+                      className="object-cover"
+                    />
+                    <AvatarFallback className="bg-linear-to-br from-orange-500 to-amber-500 text-white text-3xl font-bold">
+                      M
+                    </AvatarFallback>
+                  </Avatar>
+                  {/* Online indicator */}
+                  <span className="absolute bottom-1 right-1 h-5 w-5 bg-emerald-500 rounded-full border-[3px] border-white dark:border-neutral-800" />
+                </div>
+              </div>
+
+              {/* Title */}
+              <h1 className="text-4xl sm:text-5xl font-bold tracking-tight mb-4">
+                <span className="bg-linear-to-r from-neutral-900 via-neutral-800 to-neutral-900 dark:from-white dark:via-neutral-100 dark:to-white bg-clip-text text-transparent">
+                  Bonjour, je suis{" "}
+                </span>
+                <span className="bg-linear-to-r from-orange-500 via-amber-500 to-orange-600 bg-clip-text text-transparent">
+                  Max
+                </span>
+              </h1>
+              <p className="text-lg text-muted-foreground max-w-md mx-auto">
+                Votre assistant intelligent pour créer des devis et factures
+                professionnels
+              </p>
+            </div>
+
+            {/* Action cards */}
+            <div className="grid sm:grid-cols-2 gap-5 max-w-2xl mx-auto">
+              {/* Quote Card */}
+              <button
+                onClick={() => handleQuickAction("quote")}
+                disabled={isLoading}
+                className="group relative p-6 rounded-2xl text-left transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 hover:border-orange-300 dark:hover:border-orange-700 shadow-sm hover:shadow-xl hover:shadow-orange-500/10"
+              >
+                {/* Gradient overlay on hover */}
+                <div className="absolute inset-0 rounded-2xl bg-linear-to-br from-orange-500/5 via-transparent to-amber-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+
+                <div className="relative">
+                  {/* Icon */}
+                  <div className="h-12 w-12 rounded-lg border border-orange-200 dark:border-orange-900 bg-orange-50 dark:bg-orange-950/20 flex items-center justify-center mb-4 group-hover:bg-orange-100 dark:group-hover:bg-orange-950/30 transition-colors">
+                    <FileCheck className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                  </div>
+
+                  {/* Text */}
+                  <h3 className="text-xl font-semibold text-foreground mb-2">
+                    Créer un devis
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    Générez un devis professionnel en quelques secondes
+                  </p>
+
+                  {/* Arrow */}
+                  <div className="absolute top-6 right-6 h-8 w-8 rounded-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 group-hover:translate-x-1">
+                    <svg
+                      className="h-4 w-4 text-orange-500"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 5l7 7-7 7"
+                      />
+                    </svg>
+                  </div>
+                </div>
+              </button>
+
+              {/* Invoice Card */}
+              <button
+                onClick={() => handleQuickAction("invoice")}
+                disabled={isLoading}
+                className="group relative p-6 rounded-2xl text-left transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 hover:border-orange-300 dark:hover:border-orange-700 shadow-sm hover:shadow-xl hover:shadow-orange-500/10"
+              >
+                {/* Gradient overlay on hover */}
+                <div className="absolute inset-0 rounded-2xl bg-linear-to-br from-amber-500/5 via-transparent to-orange-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+
+                <div className="relative">
+                  {/* Icon */}
+                  <div className="h-12 w-12 rounded-lg border border-orange-200 dark:border-orange-900 bg-orange-50 dark:bg-orange-950/20 flex items-center justify-center mb-4 group-hover:bg-orange-100 dark:group-hover:bg-orange-950/30 transition-colors">
+                    <FilePenLine className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                  </div>
+
+                  {/* Text */}
+                  <h3 className="text-xl font-semibold text-foreground mb-2">
+                    Créer une facture
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    Émettez une facture conforme en un instant
+                  </p>
+
+                  {/* Arrow */}
+                  <div className="absolute top-6 right-6 h-8 w-8 rounded-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 group-hover:translate-x-1">
+                    <svg
+                      className="h-4 w-4 text-orange-500"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 5l7 7-7 7"
+                      />
+                    </svg>
+                  </div>
+                </div>
+              </button>
+            </div>
+
+            {/* Loading indicator */}
+            {isLoading && (
+              <div className="mt-8 flex items-center justify-center gap-3">
+                <div className="flex gap-1.5">
+                  <span className="h-2.5 w-2.5 animate-bounce rounded-full bg-orange-500 [animation-delay:-0.3s]" />
+                  <span className="h-2.5 w-2.5 animate-bounce rounded-full bg-orange-500 [animation-delay:-0.15s]" />
+                  <span className="h-2.5 w-2.5 animate-bounce rounded-full bg-orange-500" />
+                </div>
+                <span className="text-sm font-medium text-muted-foreground">
+                  Création en cours...
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Bottom decoration */}
+        <div className="relative z-10 pb-8 text-center">
+          <p className="text-xs text-muted-foreground/60">
+            Propulsé par l&apos;intelligence artificielle
+          </p>
+        </div>
+
+        {/* Modals */}
+        <ClientPickerModal
+          clients={clients}
+          isOpen={showClientPicker}
+          onClose={() => setShowClientPicker(false)}
+          onSelect={handleClientSelect}
+        />
+        <NewClientModal
+          isOpen={showNewClientModal}
+          onClose={() => setShowNewClientModal(false)}
+          onClientCreated={(client) => {
+            onClientCreated?.(client);
+            handleClientSelect(client);
+          }}
+        />
+      </div>
+    );
+  }
+
+  // Normal chat interface (after interaction)
   return (
     <div className="relative grid h-full grid-rows-[auto_1fr_auto]">
       <ClientPickerModal
@@ -438,22 +723,36 @@ export function Chat({
         }}
       />
       <div className="border-b px-4 py-3">
-        <div className="flex items-center gap-3">
-          <Avatar className="h-10 w-10">
-            <AvatarImage
-              src="https://ckvcijpgohqlnvoinwmc.supabase.co/storage/v1/object/public/buildify-assets/Logo/Agent%20IA.png"
-              alt="Max"
-            />
-            <AvatarFallback className="bg-primary text-primary-foreground">
-              M
-            </AvatarFallback>
-          </Avatar>
-          <div>
-            <h2 className="font-semibold">Max</h2>
-            <p className="text-sm text-muted-foreground">
-              Créez vos devis et factures avec Max
-            </p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Avatar className="h-10 w-10">
+              <AvatarImage
+                src="https://ckvcijpgohqlnvoinwmc.supabase.co/storage/v1/object/public/buildify-assets/Logo/Agent%20IA.png"
+                alt="Max"
+              />
+              <AvatarFallback className="bg-primary text-primary-foreground">
+                M
+              </AvatarFallback>
+            </Avatar>
+            <div>
+              <h2 className="font-semibold">Max</h2>
+              <p className="text-sm text-muted-foreground">
+                Créez vos devis et factures avec Max
+              </p>
+            </div>
           </div>
+          {/* Switch to preview button - visible on screens smaller than 2xl */}
+          {onSwitchToPreview && document && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="2xl:hidden h-9 w-9 rounded-full bg-muted hover:bg-muted/80"
+              onClick={onSwitchToPreview}
+              title="Voir l'aperçu"
+            >
+              <Eye className="h-4 w-4 text-muted-foreground" />
+            </Button>
+          )}
         </div>
       </div>
 
@@ -502,31 +801,10 @@ export function Chat({
                     {message.content}
                   </p>
                 </div>
-                {message.id === "1" && showQuickActions && (
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="rounded-full"
-                      onClick={() => handleQuickAction("quote")}
-                      disabled={isLoading}
-                    >
-                      Devis
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="rounded-full"
-                      onClick={() => handleQuickAction("invoice")}
-                      disabled={isLoading}
-                    >
-                      Facture
-                    </Button>
-                  </div>
-                )}
                 {shouldShowClientButton &&
                   message.role === "assistant" &&
-                  message.id !== "1" && (
+                  message ===
+                    messages.filter((m) => m.role === "assistant").pop() && (
                     <div className="flex gap-2">
                       <Button
                         variant="outline"

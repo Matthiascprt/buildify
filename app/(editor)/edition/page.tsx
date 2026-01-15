@@ -2,16 +2,17 @@ import {
   getProfile,
   getCompany,
   getClients,
+  getQuote,
+  getInvoice,
   getNextQuoteNumber,
   getNextInvoiceNumber,
-  getQuoteWithClient,
-  getInvoiceWithClient,
+  getClient,
 } from "@/lib/supabase/api";
 import { EditionClient } from "./edition-client";
-import type {
-  DocumentData,
-  QuoteData,
-  InvoiceData,
+import type { DocumentData } from "@/lib/types/document";
+import {
+  quoteToDocumentData,
+  invoiceToDocumentData,
 } from "@/lib/types/document";
 
 interface EditionPageProps {
@@ -34,80 +35,25 @@ export default async function EditionPage({ searchParams }: EditionPageProps) {
   let initialDocument: DocumentData | null = null;
   let initialAccentColor: string | null = null;
 
-  if (params.id && params.type) {
-    const documentId = parseInt(params.id, 10);
-
-    if (!isNaN(documentId)) {
-      if (params.type === "quote") {
-        const quote = await getQuoteWithClient(documentId);
-        if (quote && quote.content) {
-          const content = quote.content as unknown as QuoteData;
-          // Use client data from DB relation if available
-          const clientFromDb = quote.clients;
-          const clientData = clientFromDb
-            ? {
-                id: clientFromDb.id,
-                name: [clientFromDb.first_name, clientFromDb.last_name]
-                  .filter(Boolean)
-                  .join(" "),
-                address: "",
-                city: "",
-                phone: clientFromDb.phone || "",
-                email: clientFromDb.email || "",
-              }
-            : content.client;
-
-          initialDocument = {
-            ...content,
-            type: "quote",
-            id: quote.id,
-            number: quote.quote_number || content.number || "",
-            client: clientData,
-            company: {
-              ...content.company,
-              // Always use current company data for protected fields (even if null)
-              logoUrl: company?.logo_url ?? undefined,
-              paymentTerms: company?.payment_terms ?? undefined,
-              legalNotice: company?.legal_notice ?? undefined,
-            },
-          };
-          initialAccentColor = quote.color || null;
-        }
-      } else if (params.type === "invoice") {
-        const invoice = await getInvoiceWithClient(documentId);
-        if (invoice && invoice.content) {
-          const content = invoice.content as unknown as InvoiceData;
-          // Use client data from DB relation if available
-          const clientFromDb = invoice.clients;
-          const clientData = clientFromDb
-            ? {
-                id: clientFromDb.id,
-                name: [clientFromDb.first_name, clientFromDb.last_name]
-                  .filter(Boolean)
-                  .join(" "),
-                address: "",
-                city: "",
-                phone: clientFromDb.phone || "",
-                email: clientFromDb.email || "",
-              }
-            : content.client;
-
-          initialDocument = {
-            ...content,
-            type: "invoice",
-            id: invoice.id,
-            number: invoice.invoice_number || content.number || "",
-            client: clientData,
-            company: {
-              ...content.company,
-              // Always use current company data for protected fields (even if null)
-              logoUrl: company?.logo_url ?? undefined,
-              paymentTerms: company?.payment_terms ?? undefined,
-              legalNotice: company?.legal_notice ?? undefined,
-            },
-          };
-          initialAccentColor = invoice.color || null;
-        }
+  // Load existing document if id and type are provided
+  if (params.id && params.type && company) {
+    if (params.type === "quote") {
+      const quote = await getQuote(params.id);
+      if (quote) {
+        const client = quote.client_id
+          ? await getClient(quote.client_id)
+          : null;
+        initialDocument = quoteToDocumentData(quote, company, client);
+        initialAccentColor = quote.color;
+      }
+    } else if (params.type === "invoice") {
+      const invoice = await getInvoice(params.id);
+      if (invoice) {
+        const client = invoice.client_id
+          ? await getClient(invoice.client_id)
+          : null;
+        initialDocument = invoiceToDocumentData(invoice, company, client);
+        initialAccentColor = invoice.color;
       }
     }
   }

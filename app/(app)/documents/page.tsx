@@ -1,68 +1,78 @@
-import {
-  getQuotesWithClients,
-  getInvoicesWithClients,
-} from "@/lib/supabase/api";
 import { DocumentsClient } from "./documents-client";
+import {
+  getQuotes,
+  getInvoices,
+  getClients,
+  getCompany,
+} from "@/lib/supabase/api";
 
 export type DocumentType = "devis" | "facture";
 
 export interface DocumentItem {
-  id: number;
+  id: string;
   numero: string;
   type: DocumentType;
   clientNom: string;
   dateCreation: Date;
   totalTTC: number;
+  projectTitle?: string;
+  companyName?: string;
+  companyLogo?: string;
+  accentColor?: string;
 }
 
 export default async function DocumentsPage() {
-  const [quotes, invoices] = await Promise.all([
-    getQuotesWithClients(),
-    getInvoicesWithClients(),
+  const [quotes, invoices, clients, company] = await Promise.all([
+    getQuotes(),
+    getInvoices(),
+    getClients(),
+    getCompany(),
   ]);
 
-  const documents: DocumentItem[] = [
-    ...quotes.map((quote) => {
-      const content = quote.content as {
-        totalTTC?: number;
-        client?: { name?: string };
-      } | null;
-      const clientName = quote.clients
-        ? `${quote.clients.first_name || ""} ${quote.clients.last_name || ""}`.trim()
-        : content?.client?.name || "Client inconnu";
+  // Build a map of client IDs to names for quick lookup
+  const clientMap = new Map(
+    clients.map((c) => [
+      c.id,
+      `${c.first_name || ""} ${c.last_name || ""}`.trim() || "Client sans nom",
+    ]),
+  );
 
-      return {
-        id: quote.id,
-        numero:
-          quote.quote_number ||
-          `${new Date().getFullYear()}-${String(quote.id).padStart(4, "0")}`,
-        type: "devis" as DocumentType,
-        clientNom: clientName,
-        dateCreation: new Date(quote.created_at),
-        totalTTC: content?.totalTTC || 0,
-      };
-    }),
-    ...invoices.map((invoice) => {
-      const content = invoice.content as {
-        totalTTC?: number;
-        client?: { name?: string };
-      } | null;
-      const clientName = invoice.clients
-        ? `${invoice.clients.first_name || ""} ${invoice.clients.last_name || ""}`.trim()
-        : content?.client?.name || "Client inconnu";
+  // Transform quotes to DocumentItem
+  const quoteItems: DocumentItem[] = quotes.map((q) => ({
+    id: q.id,
+    numero: q.number,
+    type: "devis" as DocumentType,
+    clientNom: q.client_id
+      ? clientMap.get(q.client_id) || "Client inconnu"
+      : "Sans client",
+    dateCreation: new Date(q.created_at),
+    totalTTC: q.content?.totals?.total_ttc || 0,
+    projectTitle: q.content?.project_title,
+    companyName: company?.name || undefined,
+    companyLogo: company?.logo_url || undefined,
+    accentColor: q.color || undefined,
+  }));
 
-      return {
-        id: invoice.id,
-        numero:
-          invoice.invoice_number ||
-          `${new Date().getFullYear()}-${String(invoice.id).padStart(4, "0")}`,
-        type: "facture" as DocumentType,
-        clientNom: clientName,
-        dateCreation: new Date(invoice.created_at),
-        totalTTC: content?.totalTTC || 0,
-      };
-    }),
-  ];
+  // Transform invoices to DocumentItem
+  const invoiceItems: DocumentItem[] = invoices.map((i) => ({
+    id: i.id,
+    numero: i.number,
+    type: "facture" as DocumentType,
+    clientNom: i.client_id
+      ? clientMap.get(i.client_id) || "Client inconnu"
+      : "Sans client",
+    dateCreation: new Date(i.created_at),
+    totalTTC: i.content?.totals?.total_ttc || 0,
+    projectTitle: i.content?.project_title,
+    companyName: company?.name || undefined,
+    companyLogo: company?.logo_url || undefined,
+    accentColor: i.color || undefined,
+  }));
+
+  // Combine and sort by date (most recent first)
+  const documents = [...quoteItems, ...invoiceItems].sort(
+    (a, b) => b.dateCreation.getTime() - a.dateCreation.getTime(),
+  );
 
   return <DocumentsClient initialDocuments={documents} />;
 }

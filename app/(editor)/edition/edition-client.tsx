@@ -1,23 +1,19 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
+import { Send, Mic, MicOff } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { Chat } from "@/components/edition/chat";
 import { DocumentPreview } from "@/components/edition/document-preview";
-import {
-  deleteQuote,
-  deleteInvoice,
-  updateQuote,
-  updateInvoice,
-  getNextInvoiceNumber,
-  createInvoiceWithContent,
-  syncClientFromDocument,
-} from "@/lib/supabase/api";
 import type { DocumentData, LineItem, QuoteData } from "@/lib/types/document";
 import {
   calculateTotals,
   calculateLineTotal,
   convertQuoteToInvoice,
   recalculateSectionTotals,
+  documentDataToContent,
+  generateLineId,
 } from "@/lib/types/document";
 import type { Company, Client } from "@/lib/supabase/types";
 
@@ -53,176 +49,90 @@ export function EditionClient({
   const [accentColor, setAccentColor] = useState<string | null>(
     initialAccentColor,
   );
-  const [clientSyncError, setClientSyncError] = useState<string | null>(null);
+  const [mobileView, setMobileView] = useState<"chat" | "preview">("chat");
 
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const previousClientRef = useRef<{
-    name?: string;
-    phone?: string;
-    email?: string;
-  }>({
-    name: initialDocument?.client?.name,
-    phone: initialDocument?.client?.phone,
-    email: initialDocument?.client?.email,
-  });
-
-  // Sync client when name, phone or email changes in document
+  // Sync document state when initialDocument changes (e.g., navigating to another document)
   useEffect(() => {
-    if (!document?.id || !document?.client) return;
+    setDocument(initialDocument);
+    lastSavedContentRef.current = "";
+  }, [initialDocument]);
 
-    const currentClient = document.client;
-    const prevClient = previousClientRef.current;
+  // Sync accent color when initialAccentColor changes
+  useEffect(() => {
+    setAccentColor(initialAccentColor);
+  }, [initialAccentColor]);
+  const [clientSyncError, setClientSyncError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSavedContentRef = useRef<string>("");
 
-    // Check what changed
-    const nameChanged = currentClient.name !== prevClient.name;
-    const phoneChanged = currentClient.phone !== prevClient.phone;
-    const emailChanged = currentClient.email !== prevClient.email;
-
-    if (!nameChanged && !phoneChanged && !emailChanged) return;
-
-    // Clear previous timeout
-    if (syncTimeoutRef.current) {
-      clearTimeout(syncTimeoutRef.current);
-    }
-
-    // Store what field changed for potential rollback
-    const changedField = nameChanged
-      ? "name"
-      : phoneChanged
-        ? "phone"
-        : "email";
-    const previousValue = prevClient[changedField];
-
-    syncTimeoutRef.current = setTimeout(async () => {
-      const result = await syncClientFromDocument(
-        document.type,
-        document.id!,
-        currentClient.id,
-        {
-          name: currentClient.name,
-          phone: currentClient.phone,
-          email: currentClient.email,
-        },
-        prevClient.name,
-      );
-
-      if (result.success && result.client) {
-        setClientSyncError(null);
-        // Update the client ID and auto-fill phone/email when client is associated
-        if (result.action === "created" || result.action === "associated") {
-          setDocument((prev) => {
-            if (!prev) return prev;
-            const clientUpdate: typeof prev.client = {
-              ...prev.client,
-              id: result.client!.id,
-            };
-
-            if (result.action === "associated") {
-              // Client reconnu → remplir avec ses infos
-              const fullName = [
-                result.client!.first_name,
-                result.client!.last_name,
-              ]
-                .filter(Boolean)
-                .join(" ");
-              clientUpdate.phone = result.client!.phone || "";
-              clientUpdate.email = result.client!.email || "";
-              if (fullName) {
-                clientUpdate.name = fullName;
-              }
-            } else if (result.action === "created") {
-              // Nouveau client (nom non reconnu) → vider téléphone et email
-              clientUpdate.phone = "";
-              clientUpdate.email = "";
-            }
-
-            // Update ref with new values
-            previousClientRef.current = {
-              name: clientUpdate.name,
-              phone: clientUpdate.phone,
-              email: clientUpdate.email,
-            };
-
-            return {
-              ...prev,
-              client: clientUpdate,
-            };
-          });
-        } else {
-          // Update ref with current values (for "updated" or "none" action)
-          previousClientRef.current = {
-            name: currentClient.name,
-            phone: currentClient.phone,
-            email: currentClient.email,
-          };
-        }
-      } else if (!result.success && result.error) {
-        // Show error for duplicate email/phone and restore previous value
-        setClientSyncError(result.error);
-        setDocument((prev) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            client: {
-              ...prev.client,
-              [changedField]: previousValue,
-            },
-          };
-        });
-      }
-    }, 500);
-
-    return () => {
-      if (syncTimeoutRef.current) {
-        clearTimeout(syncTimeoutRef.current);
-      }
-    };
-  }, [document?.id, document?.type, document?.client]);
-
-  const saveToDatabase = useCallback(async (doc: DocumentData) => {
+  const saveDocumentToDatabase = useCallback(async (doc: DocumentData) => {
     if (!doc.id) return;
 
-    const { id, type, ...content } = doc;
-    const contentWithoutIdType = { ...content, type };
+    const content = documentDataToContent(doc);
+    const clientId = doc.client?.id ? String(doc.client.id) : null;
+    // Include both content AND client_id in comparison to detect all changes
+    const saveKey = JSON.stringify({ content, client_id: clientId });
 
-    if (type === "quote") {
-      await updateQuote(id, { content: contentWithoutIdType });
-    } else {
-      await updateInvoice(id, { content: contentWithoutIdType });
+    if (saveKey === lastSavedContentRef.current) {
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const type = doc.type === "quote" ? "quote" : "invoice";
+      const response = await fetch(`/api/documents?id=${doc.id}&type=${type}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content,
+          client_id: doc.client?.id ? String(doc.client.id) : null,
+        }),
+      });
+
+      if (response.ok) {
+        lastSavedContentRef.current = saveKey;
+      }
+    } catch (error) {
+      console.error("Auto-save failed:", error);
+    } finally {
+      setIsSaving(false);
     }
   }, []);
 
+  const debouncedSave = useCallback(
+    (doc: DocumentData) => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+      saveTimeoutRef.current = setTimeout(() => {
+        saveDocumentToDatabase(doc);
+      }, 1000);
+    },
+    [saveDocumentToDatabase],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (document?.id) {
+      debouncedSave(document);
+    }
+  }, [document, debouncedSave]);
+
   const handleDocumentChange = useCallback(
     (newDocument: DocumentData | null) => {
-      // When document comes from AI with a linked client, update previousClientRef
-      // to prevent triggering unnecessary client sync
-      if (newDocument?.client?.id) {
-        previousClientRef.current = {
-          name: newDocument.client.name,
-          phone: newDocument.client.phone,
-          email: newDocument.client.email,
-        };
-      }
-
       setDocument(newDocument);
 
-      // Save to database when AI updates the document
-      if (newDocument?.id) {
-        // Clear any pending save timeout
-        if (saveTimeoutRef.current) {
-          clearTimeout(saveTimeoutRef.current);
-        }
-        // Save with small debounce to batch rapid updates
-        saveTimeoutRef.current = setTimeout(() => {
-          saveToDatabase(newDocument);
-        }, 100);
-      }
-
-      // Numbers are now managed by the database, so we update them after document creation
+      // Update next numbers when document is created
       if (newDocument?.number) {
         if (newDocument.type === "quote") {
-          // Increment the number for the next potential document
           const parts = newDocument.number.split("-");
           if (parts.length === 3) {
             const nextSeq = (parseInt(parts[2], 10) + 1)
@@ -241,7 +151,7 @@ export function EditionClient({
         }
       }
     },
-    [saveToDatabase],
+    [],
   );
 
   const handleAccentColorChange = useCallback(
@@ -250,10 +160,15 @@ export function EditionClient({
 
       // Save color to database if document exists
       if (document?.id) {
-        if (document.type === "quote") {
-          await updateQuote(document.id, { color });
-        } else {
-          await updateInvoice(document.id, { color });
+        const type = document.type === "quote" ? "quote" : "invoice";
+        try {
+          await fetch(`/api/documents?id=${document.id}&type=${type}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ color }),
+          });
+        } catch (error) {
+          console.error("Failed to save color:", error);
         }
       }
     },
@@ -264,7 +179,7 @@ export function EditionClient({
     (path: string, value: string | number) => {
       if (!document) return;
 
-      // Champs protégés - modifiables uniquement via Paramètres
+      // Protected fields - only editable via Settings
       const protectedPaths = [
         "number",
         "date",
@@ -315,7 +230,6 @@ export function EditionClient({
               field === "unitPrice" ? (value as number) : item.unitPrice || 0;
             item.total = calculateLineTotal(qty, price);
 
-            // Synchronize global tvaRate when item TVA is changed
             if (field === "tva") {
               updated.tvaRate = value as number;
             }
@@ -349,41 +263,43 @@ export function EditionClient({
           (updated as Record<string, unknown>)[path] = value;
         }
 
-        // Save to database with debounce
-        if (saveTimeoutRef.current) {
-          clearTimeout(saveTimeoutRef.current);
-        }
-        saveTimeoutRef.current = setTimeout(() => {
-          saveToDatabase(updated);
-        }, 300);
-
         return updated;
       });
     },
-    [document, saveToDatabase],
+    [document],
   );
 
   const handleDeleteDocument = async (): Promise<{
     success: boolean;
     error?: string;
   }> => {
-    if (!document || !document.id) {
+    if (!document) {
       return { success: false, error: "Aucun document à supprimer" };
     }
 
-    let result: { success: boolean; error?: string };
-
-    if (document.type === "quote") {
-      result = await deleteQuote(document.id);
-    } else {
-      result = await deleteInvoice(document.id);
+    // Delete from database if document has an ID
+    if (document.id) {
+      const type = document.type === "quote" ? "quote" : "invoice";
+      try {
+        const response = await fetch(
+          `/api/documents?id=${document.id}&type=${type}`,
+          { method: "DELETE" },
+        );
+        if (!response.ok) {
+          const data = await response.json();
+          return {
+            success: false,
+            error: data.error || "Erreur de suppression",
+          };
+        }
+      } catch (error) {
+        console.error("Delete error:", error);
+        return { success: false, error: "Erreur de connexion" };
+      }
     }
 
-    if (result.success) {
-      setDocument(null);
-    }
-
-    return result;
+    setDocument(null);
+    return { success: true };
   };
 
   const handleConvertToInvoice = async (): Promise<{
@@ -394,36 +310,58 @@ export function EditionClient({
       return { success: false, error: "Aucun devis à convertir" };
     }
 
-    const invoiceNumber = await getNextInvoiceNumber();
     const invoiceData = convertQuoteToInvoice(
       document as QuoteData,
-      invoiceNumber,
+      nextInvoiceNumber,
     );
 
-    const { type, ...contentWithoutType } = invoiceData;
-    const contentForDb = { ...contentWithoutType, type };
-    delete (contentForDb as Record<string, unknown>).id;
+    // Create invoice in database
+    try {
+      const { documentDataToContent } = await import("@/lib/types/document");
+      const content = documentDataToContent(invoiceData);
 
-    const result = await createInvoiceWithContent(
-      invoiceNumber,
-      contentForDb,
-      undefined,
-      document.client.id,
-    );
+      const response = await fetch("/api/documents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "invoice",
+          client_id: invoiceData.client.id || null,
+          number: invoiceData.number,
+          due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+            .toISOString()
+            .split("T")[0],
+          content,
+          color: accentColor,
+        }),
+      });
 
-    if (result.success && result.invoice) {
-      const newInvoice: DocumentData = {
+      if (!response.ok) {
+        const data = await response.json();
+        return { success: false, error: data.error || "Erreur de création" };
+      }
+
+      const { document: createdInvoice } = await response.json();
+
+      // Update local state with the created invoice
+      setDocument({
         ...invoiceData,
-        id: result.invoice.id,
-      };
-      setDocument(newInvoice);
-      return { success: true };
-    }
+        id: createdInvoice.id,
+      });
 
-    return {
-      success: false,
-      error: result.error || "Erreur lors de la création",
-    };
+      // Update next invoice number
+      const parts = nextInvoiceNumber.split("-");
+      if (parts.length === 3) {
+        const nextSeq = (parseInt(parts[2], 10) + 1)
+          .toString()
+          .padStart(4, "0");
+        setNextInvoiceNumber(`${parts[0]}-${parts[1]}-${nextSeq}`);
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error("Convert to invoice error:", error);
+      return { success: false, error: "Erreur de connexion" };
+    }
   };
 
   const handleAddLine = useCallback(() => {
@@ -432,24 +370,25 @@ export function EditionClient({
     setDocument((prev) => {
       if (!prev) return prev;
 
-      // Generate new line ID
       const nonSectionItems = prev.items.filter((item) => !item.isSection);
       const sections = prev.items.filter((item) => item.isSection);
       const lastSection = sections[sections.length - 1];
 
-      let newId: string;
+      // Numéro d'affichage (pas l'identifiant technique)
+      let displayId: string;
       if (lastSection) {
         const sectionNumber = lastSection.id;
         const sectionItems = prev.items.filter(
           (item) => !item.isSection && item.id.startsWith(`${sectionNumber}.`),
         );
-        newId = `${sectionNumber}.${sectionItems.length + 1}`;
+        displayId = `${sectionNumber}.${sectionItems.length + 1}`;
       } else {
-        newId = `${nonSectionItems.length + 1}`;
+        displayId = `${nonSectionItems.length + 1}`;
       }
 
       const newLine: LineItem = {
-        id: newId,
+        lineId: generateLineId(), // UUID stable et unique
+        id: displayId, // Numéro d'affichage uniquement
         designation: "",
         description: "",
         quantity: "1",
@@ -467,32 +406,26 @@ export function EditionClient({
         prev.deposit,
       );
 
-      const updated = {
+      return {
         ...prev,
         items: recalculatedItems,
         ...totals,
       };
-
-      // Save to database with debounce
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
-      saveTimeoutRef.current = setTimeout(() => {
-        saveToDatabase(updated);
-      }, 300);
-
-      return updated;
     });
-  }, [document, saveToDatabase]);
+  }, [document]);
 
-  const handleRemoveLine = useCallback(
-    (lineIndex: number) => {
-      if (!document) return;
+  const handleRemoveLines = useCallback(
+    (lineIndices: number[]) => {
+      if (!document || lineIndices.length === 0) return;
 
       setDocument((prev) => {
         if (!prev) return prev;
 
-        const newItems = prev.items.filter((_, index) => index !== lineIndex);
+        // Trier les indices en ordre décroissant pour supprimer de la fin
+        const sortedIndices = [...lineIndices].sort((a, b) => b - a);
+        const indexSet = new Set(sortedIndices);
+
+        const newItems = prev.items.filter((_, index) => !indexSet.has(index));
         const recalculatedItems = recalculateSectionTotals(newItems);
         const totals = calculateTotals(
           recalculatedItems,
@@ -500,30 +433,18 @@ export function EditionClient({
           prev.deposit,
         );
 
-        const updated = {
+        return {
           ...prev,
           items: recalculatedItems,
           ...totals,
         };
-
-        // Save to database with debounce
-        if (saveTimeoutRef.current) {
-          clearTimeout(saveTimeoutRef.current);
-        }
-        saveTimeoutRef.current = setTimeout(() => {
-          saveToDatabase(updated);
-        }, 300);
-
-        return updated;
       });
     },
-    [document, saveToDatabase],
+    [document],
   );
 
-  // Callback to add a new client to the list (called when AI or modal creates a client)
   const handleClientCreated = useCallback((newClient: Client) => {
     setClients((prev) => {
-      // Avoid duplicates
       if (prev.some((c) => c.id === newClient.id)) {
         return prev;
       }
@@ -531,9 +452,168 @@ export function EditionClient({
     });
   }, []);
 
+  // Mobile chat input state
+  const [mobileInput, setMobileInput] = useState("");
+  const [isMobileLoading, setIsMobileLoading] = useState(false);
+  const [isMobileRecording, setIsMobileRecording] = useState(false);
+  const mobileRecognitionRef = useRef<SpeechRecognition | null>(null);
+
+  const handleMobileSendMessage = useCallback(async () => {
+    if (!mobileInput.trim() || isMobileLoading || !document) return;
+
+    setIsMobileLoading(true);
+    const messageContent = mobileInput.trim();
+    setMobileInput("");
+
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [{ role: "user", content: messageContent }],
+          document,
+          company,
+          clients,
+          nextQuoteNumber,
+          nextInvoiceNumber,
+          accentColor,
+          isFirstMessage: false,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.document !== undefined) {
+        handleDocumentChange(data.document);
+      }
+
+      if (data.accentColor !== undefined) {
+        setAccentColor(data.accentColor);
+      }
+    } catch (error) {
+      console.error("Mobile chat error:", error);
+    } finally {
+      setIsMobileLoading(false);
+    }
+  }, [
+    mobileInput,
+    isMobileLoading,
+    document,
+    company,
+    clients,
+    nextQuoteNumber,
+    nextInvoiceNumber,
+    accentColor,
+    handleDocumentChange,
+  ]);
+
+  const toggleMobileRecording = useCallback(() => {
+    if (isMobileRecording) {
+      if (mobileRecognitionRef.current) {
+        mobileRecognitionRef.current.stop();
+        mobileRecognitionRef.current = null;
+      }
+      setIsMobileRecording(false);
+    } else {
+      if (
+        !("webkitSpeechRecognition" in window) &&
+        !("SpeechRecognition" in window)
+      ) {
+        return;
+      }
+
+      const SpeechRecognitionAPI =
+        window.SpeechRecognition || window.webkitSpeechRecognition;
+      const recognition = new SpeechRecognitionAPI();
+
+      recognition.lang = "fr-FR";
+      recognition.continuous = true;
+      recognition.interimResults = true;
+
+      recognition.onstart = () => setIsMobileRecording(true);
+      recognition.onresult = (event: SpeechRecognitionEvent) => {
+        let finalTranscript = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript;
+          }
+        }
+        if (finalTranscript) {
+          setMobileInput((prev) => prev + (prev ? " " : "") + finalTranscript);
+        }
+      };
+      recognition.onerror = () => {
+        setIsMobileRecording(false);
+        mobileRecognitionRef.current = null;
+      };
+      recognition.onend = () => setIsMobileRecording(false);
+
+      mobileRecognitionRef.current = recognition;
+      recognition.start();
+    }
+  }, [isMobileRecording]);
+
+  const mobileInputComponent = (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        handleMobileSendMessage();
+      }}
+      className="p-4"
+    >
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          variant={isMobileRecording ? "destructive" : "outline"}
+          size="icon"
+          className={`shrink-0 ${isMobileRecording ? "animate-pulse" : ""}`}
+          onClick={toggleMobileRecording}
+        >
+          {isMobileRecording ? (
+            <MicOff className="h-4 w-4" />
+          ) : (
+            <Mic className="h-4 w-4" />
+          )}
+        </Button>
+        <Textarea
+          value={mobileInput}
+          onChange={(e) => setMobileInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              handleMobileSendMessage();
+            }
+          }}
+          placeholder="Modifier le document..."
+          className="min-h-10 max-h-32 resize-none"
+          rows={1}
+        />
+        <Button
+          type="submit"
+          size="icon"
+          disabled={!mobileInput.trim() || isMobileLoading}
+        >
+          <Send className="h-4 w-4" />
+        </Button>
+      </div>
+    </form>
+  );
+
+  // Hide document preview in initial state (no document)
+  const showDocumentPreview = document !== null;
+
   return (
-    <div className="grid h-full grid-cols-1 lg:grid-cols-2 overflow-hidden">
-      <div className="border-r h-full overflow-hidden">
+    <div
+      className={`grid h-full grid-cols-1 ${showDocumentPreview ? "2xl:grid-cols-2" : ""} overflow-hidden`}
+    >
+      {/* Chat - visible on desktop (2xl+), or on smaller screens when mobileView is "chat" */}
+      <div
+        className={`h-full overflow-hidden ${showDocumentPreview ? "2xl:border-r" : ""} ${
+          showDocumentPreview && mobileView === "preview"
+            ? "hidden 2xl:block"
+            : ""
+        }`}
+      >
         <Chat
           userInitial={userInitial}
           company={company}
@@ -543,24 +623,38 @@ export function EditionClient({
           nextQuoteNumber={nextQuoteNumber}
           nextInvoiceNumber={nextInvoiceNumber}
           isEditingExisting={!!initialDocument}
-          onAccentColorChange={handleAccentColorChange}
-          onClientCreated={handleClientCreated}
-        />
-      </div>
-      <div className="hidden lg:block h-full overflow-hidden">
-        <DocumentPreview
-          document={document}
-          onDeleteDocument={handleDeleteDocument}
-          onDocumentUpdate={handleDocumentUpdate}
-          onConvertToInvoice={handleConvertToInvoice}
-          onAddLine={handleAddLine}
-          onRemoveLine={handleRemoveLine}
           accentColor={accentColor}
           onAccentColorChange={handleAccentColorChange}
-          clientSyncError={clientSyncError}
-          onClientSyncErrorClear={() => setClientSyncError(null)}
+          onClientCreated={handleClientCreated}
+          onSwitchToPreview={() => setMobileView("preview")}
         />
       </div>
+
+      {/* Document Preview - visible on desktop (2xl+), or on smaller screens when mobileView is "preview" */}
+      {showDocumentPreview && (
+        <div
+          className={`h-full overflow-hidden ${
+            mobileView === "chat" ? "hidden 2xl:block" : ""
+          }`}
+        >
+          <DocumentPreview
+            document={document}
+            onDeleteDocument={handleDeleteDocument}
+            onDocumentUpdate={handleDocumentUpdate}
+            onConvertToInvoice={handleConvertToInvoice}
+            onAddLine={handleAddLine}
+            onRemoveLines={handleRemoveLines}
+            accentColor={accentColor}
+            onAccentColorChange={handleAccentColorChange}
+            clientSyncError={clientSyncError}
+            onClientSyncErrorClear={() => setClientSyncError(null)}
+            isSaving={isSaving}
+            showMobileInput={mobileView === "preview"}
+            mobileInputComponent={mobileInputComponent}
+            onSwitchToChat={() => setMobileView("chat")}
+          />
+        </div>
+      )}
     </div>
   );
 }

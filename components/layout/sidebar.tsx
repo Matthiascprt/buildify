@@ -13,6 +13,8 @@ import {
   Settings,
   LogOut,
   Pencil,
+  CreditCard,
+  Scale,
   type LucideIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -162,6 +164,18 @@ function AccountMenu({
             Paramètres
           </Link>
         </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href="/billing" className="cursor-pointer">
+            <CreditCard className="h-4 w-4" />
+            Abonnement
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href="/legal" className="cursor-pointer">
+            <Scale className="h-4 w-4" />
+            Légal
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onClick={handleSignOut}
@@ -273,5 +287,135 @@ export function SidebarContent({ user }: SidebarProps) {
         </Link>
       </div>
     </div>
+  );
+}
+
+// Bottom navigation items for mobile
+const bottomNavItems: NavItem[] = [
+  { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { title: "Édition", href: "/edition", icon: Pencil },
+  { title: "Documents", href: "/documents", icon: FileText },
+  { title: "Clients", href: "/clients", icon: Users },
+];
+
+function BottomNavLink({
+  item,
+  isActive,
+}: {
+  item: NavItem;
+  isActive: boolean;
+}) {
+  return (
+    <Link
+      href={item.href}
+      className={cn(
+        "flex flex-col items-center justify-center gap-1 py-2 px-1 min-w-0 flex-1 transition-colors",
+        isActive ? "text-primary" : "text-muted-foreground",
+      )}
+    >
+      <item.icon className="h-5 w-5" />
+      <span className="text-[10px] font-medium truncate">{item.title}</span>
+    </Link>
+  );
+}
+
+export function BottomNav({ user }: SidebarProps) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = React.useState(false);
+  const initials = user?.email?.slice(0, 2).toUpperCase() || "U";
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const handleSignOut = React.useCallback(async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/login");
+    router.refresh();
+  }, [router]);
+
+  const themes = [
+    { value: "light", label: "Clair", icon: Sun },
+    { value: "dark", label: "Sombre", icon: Moon },
+  ] as const;
+
+  return (
+    <nav className="fixed bottom-0 left-0 right-0 z-50 lg:hidden bg-background border-t border-border">
+      <div className="flex items-center justify-around h-16 px-2 safe-area-inset-bottom">
+        {bottomNavItems.map((item) => {
+          const isActive = pathname.startsWith(item.href);
+          return (
+            <BottomNavLink key={item.href} item={item} isActive={isActive} />
+          );
+        })}
+
+        {/* Menu compte */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="flex flex-col items-center justify-center gap-1 py-2 px-1 min-w-0 flex-1 text-muted-foreground">
+              <Avatar className="h-5 w-5">
+                <AvatarFallback className="bg-muted text-muted-foreground text-[8px] font-medium">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+              <span className="text-[10px] font-medium">Compte</span>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side="top" align="end" className="w-52 mb-2">
+            <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">
+              Thème
+            </DropdownMenuLabel>
+            <div className="flex gap-2 px-3 pb-3">
+              {themes.map(({ value, label, icon: Icon }) => (
+                <button
+                  key={value}
+                  onClick={() => setTheme(value)}
+                  className={cn(
+                    "flex flex-1 flex-col items-center justify-center gap-2 rounded-md px-2.5 py-2.5 text-xs transition-colors min-w-0 w-0",
+                    mounted && theme === value
+                      ? "bg-accent text-accent-foreground"
+                      : "hover:bg-accent/50",
+                  )}
+                >
+                  <Icon className="h-4 w-4 flex-shrink-0" />
+                  <span className="text-center leading-tight">{label}</span>
+                </button>
+              ))}
+            </div>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link href="/settings" className="cursor-pointer">
+                <Settings className="h-4 w-4" />
+                Paramètres
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/billing" className="cursor-pointer">
+                <CreditCard className="h-4 w-4" />
+                Abonnement
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/legal" className="cursor-pointer">
+                <Scale className="h-4 w-4" />
+                Légal
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={handleSignOut}
+              variant="destructive"
+              className="cursor-pointer"
+            >
+              <LogOut className="h-4 w-4" />
+              Déconnexion
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </nav>
   );
 }

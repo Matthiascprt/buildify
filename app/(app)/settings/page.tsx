@@ -5,13 +5,6 @@ import Image from "next/image";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -48,6 +41,9 @@ import {
   Upload,
   X,
   ImageIcon,
+  User,
+  Building2,
+  FileText,
 } from "lucide-react";
 
 const settingsSchema = z.object({
@@ -282,239 +278,312 @@ export default function SettingsPage() {
 
   if (isLoading) {
     return (
-      <div className="space-y-8 p-6 lg:p-8">
-        <div>
-          <Skeleton className="h-8 w-48 mb-2" />
-          <Skeleton className="h-4 w-72" />
-        </div>
-        <div className="space-y-6">
-          <Skeleton className="h-48 w-full rounded-lg" />
-          <Skeleton className="h-72 w-full rounded-lg" />
+      <div className="bg-linear-to-b from-background to-muted/20">
+        <div className="w-full py-8 px-6 lg:px-10">
+          <div className="mb-8">
+            <Skeleton className="h-9 w-48 mb-2" />
+            <Skeleton className="h-5 w-72" />
+          </div>
+          <div className="space-y-6">
+            <Skeleton className="h-48 w-full rounded-lg" />
+            <Skeleton className="h-72 w-full rounded-lg" />
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-8 p-6 lg:p-8">
-      <div>
-        <h1 className="text-2xl font-bold">Paramètres</h1>
-        <p className="text-muted-foreground">
-          Configurez votre compte et vos préférences
-        </p>
-      </div>
+    <div className="bg-linear-to-b from-background to-muted/20">
+      <div className="w-full py-8 px-6 lg:px-10">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold tracking-tight">Paramètres</h1>
+          <p className="text-muted-foreground mt-1">
+            Configurez votre compte et vos préférences
+          </p>
+        </div>
 
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Profil</CardTitle>
-              <CardDescription>Vos informations personnelles</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <FormField
-                  control={form.control}
-                  name="firstName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Prénom</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Jean" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="lastName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Nom</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Dupont" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Informations entreprise</CardTitle>
-              <CardDescription>
-                Ces informations apparaîtront sur vos devis et factures.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Logo Upload Section */}
-              <div className="space-y-4 pb-2">
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            {/* Profil Section */}
+            <div className="rounded-lg border bg-card p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="h-9 w-9 rounded-md border border-orange-200 dark:border-orange-900 bg-orange-50 dark:bg-orange-950/20 flex items-center justify-center">
+                  <User className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                </div>
                 <div>
-                  <label className="text-sm font-medium">
-                    Logo de l&apos;entreprise
-                  </label>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Ce logo apparaîtra sur vos devis et factures
-                  </p>
-                </div>
-                <div className="flex flex-col items-center gap-4 p-6 border-2 border-dashed rounded-xl bg-muted/30 max-w-xs">
-                  {logoUrl ? (
-                    <div className="relative">
-                      <Image
-                        src={logoUrl}
-                        alt="Logo entreprise"
-                        width={200}
-                        height={100}
-                        className="w-48 h-24 object-contain border rounded-lg bg-background p-2"
-                        unoptimized
-                      />
-                      <button
-                        type="button"
-                        onClick={handleLogoDelete}
-                        disabled={isUploadingLogo}
-                        className="absolute -top-2 -right-2 bg-muted text-muted-foreground rounded-full p-1 hover:bg-muted-foreground/20 hover:text-foreground transition-colors"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="w-48 h-24 border-2 border-dashed rounded-lg flex items-center justify-center bg-muted/50">
-                      <ImageIcon className="h-10 w-10 text-muted-foreground/50" />
-                    </div>
-                  )}
-                  <label className="cursor-pointer w-full">
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png"
-                      onChange={handleLogoUpload}
-                      disabled={isUploadingLogo}
-                      className="hidden"
-                    />
-                    <div className="flex items-center justify-center gap-2 px-4 py-2.5 border rounded-lg hover:bg-muted transition-colors w-full">
-                      {isUploadingLogo ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Upload className="h-4 w-4" />
-                      )}
-                      <span className="text-sm font-medium">
-                        {isUploadingLogo
-                          ? "Upload en cours..."
-                          : logoUrl
-                            ? "Changer le logo"
-                            : "Choisir un fichier"}
-                      </span>
-                    </div>
-                  </label>
-                  <p className="text-xs text-muted-foreground">
-                    JPG ou PNG, max 2 Mo
+                  <h2 className="text-lg font-semibold">Profil</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Vos informations personnelles
                   </p>
                 </div>
               </div>
-
-              <Separator />
-              <div className="grid gap-4 sm:grid-cols-2">
-                <FormField
-                  control={form.control}
-                  name="companyName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Nom de l&apos;entreprise</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Mon Entreprise" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="legalStatus"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Forme juridique</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="SARL, SAS, Auto-entrepreneur..."
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <FormField
-                  control={form.control}
-                  name="siret"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>SIRET</FormLabel>
-                      <FormControl>
-                        <Input placeholder="123 456 789 00012" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="vatRate"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Taux de TVA par défaut</FormLabel>
-                      <Select
-                        value={field.value?.toString() ?? "20"}
-                        onValueChange={(value) =>
-                          field.onChange(value === "0" ? 0 : Number(value))
-                        }
-                      >
+              <div className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <FormField
+                    control={form.control}
+                    name="firstName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Prénom</FormLabel>
                         <FormControl>
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Sélectionner un taux" />
-                          </SelectTrigger>
+                          <Input placeholder="Jean" {...field} />
                         </FormControl>
-                        <SelectContent>
-                          <SelectItem value="20">20%</SelectItem>
-                          <SelectItem value="10">10%</SelectItem>
-                          <SelectItem value="5.5">5,5%</SelectItem>
-                          <SelectItem value="0">Aucune</SelectItem>
-                        </SelectContent>
-                      </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="lastName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Nom</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Dupont" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Informations entreprise Section */}
+            <div className="rounded-lg border bg-card p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="h-9 w-9 rounded-md border border-orange-200 dark:border-orange-900 bg-orange-50 dark:bg-orange-950/20 flex items-center justify-center">
+                  <Building2 className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold">
+                    Informations entreprise
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    Ces informations apparaîtront sur vos devis et factures.
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-4">
+                {/* Logo Upload Section */}
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium">
+                      Logo de l&apos;entreprise
+                    </label>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Ce logo apparaîtra sur vos devis et factures
+                    </p>
+                  </div>
+                  <div className="flex flex-col items-center gap-4 p-6 border-2 border-dashed rounded-xl bg-muted/30 max-w-xs">
+                    {logoUrl ? (
+                      <div className="relative">
+                        <Image
+                          src={logoUrl}
+                          alt="Logo entreprise"
+                          width={200}
+                          height={100}
+                          className="w-48 h-24 object-contain border rounded-lg bg-background p-2"
+                          unoptimized
+                        />
+                        <button
+                          type="button"
+                          onClick={handleLogoDelete}
+                          disabled={isUploadingLogo}
+                          className="absolute -top-2 -right-2 bg-background text-muted-foreground rounded-full p-1.5 hover:bg-destructive hover:text-destructive-foreground transition-colors shadow-md border"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="w-48 h-24 border-2 border-dashed rounded-lg flex items-center justify-center bg-muted/50">
+                        <ImageIcon className="h-10 w-10 text-muted-foreground/50" />
+                      </div>
+                    )}
+                    <label className="cursor-pointer w-full">
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png"
+                        onChange={handleLogoUpload}
+                        disabled={isUploadingLogo}
+                        className="hidden"
+                      />
+                      <div className="flex items-center justify-center gap-2 px-4 py-2.5 border rounded-lg hover:bg-muted transition-colors w-full">
+                        {isUploadingLogo ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Upload className="h-4 w-4" />
+                        )}
+                        <span className="text-sm font-medium">
+                          {isUploadingLogo
+                            ? "Upload en cours..."
+                            : logoUrl
+                              ? "Changer le logo"
+                              : "Choisir un fichier"}
+                        </span>
+                      </div>
+                    </label>
+                    <p className="text-xs text-muted-foreground">
+                      JPG ou PNG, max 2 Mo
+                    </p>
+                  </div>
+                </div>
+
+                <Separator />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <FormField
+                    control={form.control}
+                    name="companyName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Nom de l&apos;entreprise</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Mon Entreprise" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="legalStatus"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Forme juridique</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="SARL, SAS, Auto-entrepreneur..."
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <FormField
+                    control={form.control}
+                    name="siret"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>SIRET</FormLabel>
+                        <FormControl>
+                          <Input placeholder="123 456 789 00012" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="vatRate"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Taux de TVA par défaut</FormLabel>
+                        <Select
+                          value={field.value?.toString() ?? "20"}
+                          onValueChange={(value) =>
+                            field.onChange(value === "0" ? 0 : Number(value))
+                          }
+                        >
+                          <FormControl>
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Sélectionner un taux" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="20">20%</SelectItem>
+                            <SelectItem value="10">10%</SelectItem>
+                            <SelectItem value="5.5">5,5%</SelectItem>
+                            <SelectItem value="0">Aucune</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <FormField
+                  control={form.control}
+                  name="address"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Adresse</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="123 rue Exemple, 75001 Paris"
+                          {...field}
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <FormField
+                    control={form.control}
+                    name="phone"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Téléphone</FormLabel>
+                        <FormControl>
+                          <Input placeholder="06 12 34 56 78" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email professionnel</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="email"
+                            placeholder="contact@exemple.com"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
               </div>
-              <FormField
-                control={form.control}
-                name="address"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Adresse</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="123 rue Exemple, 75001 Paris"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <div className="grid gap-4 sm:grid-cols-2">
+            </div>
+
+            {/* Documents Section */}
+            <div className="rounded-lg border bg-card p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="h-9 w-9 rounded-md border border-orange-200 dark:border-orange-900 bg-orange-50 dark:bg-orange-950/20 flex items-center justify-center">
+                  <FileText className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold">Documents</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Ces informations apparaîtront automatiquement sur vos devis
+                    et factures.
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-4">
                 <FormField
                   control={form.control}
-                  name="phone"
+                  name="paymentTerms"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Téléphone</FormLabel>
+                      <FormLabel>Conditions de paiement</FormLabel>
                       <FormControl>
-                        <Input placeholder="06 12 34 56 78" {...field} />
+                        <Textarea
+                          placeholder="Ex: Paiement à 30 jours, par virement bancaire sur le compte : FR76 XXXX XXXX..."
+                          className="min-h-[100px]"
+                          {...field}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -522,14 +591,14 @@ export default function SettingsPage() {
                 />
                 <FormField
                   control={form.control}
-                  name="email"
+                  name="legalNotice"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Email professionnel</FormLabel>
+                      <FormLabel>Mentions légales</FormLabel>
                       <FormControl>
-                        <Input
-                          type="email"
-                          placeholder="contact@exemple.com"
+                        <Textarea
+                          placeholder="Ex: TVA non applicable, art. 293 B du CGI / Assurance décennale : ..."
+                          className="min-h-[100px]"
                           {...field}
                         />
                       </FormControl>
@@ -538,78 +607,36 @@ export default function SettingsPage() {
                   )}
                 />
               </div>
-            </CardContent>
-          </Card>
+            </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Documents</CardTitle>
-              <CardDescription>
-                Ces informations apparaîtront automatiquement sur vos devis et
-                factures.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <FormField
-                control={form.control}
-                name="paymentTerms"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Conditions de paiement</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        placeholder="Ex: Paiement à 30 jours, par virement bancaire sur le compte : FR76 XXXX XXXX..."
-                        className="min-h-[100px]"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
+            {/* Message Alert */}
+            {message && (
+              <Alert
+                variant={message.type === "success" ? "success" : "destructive"}
+              >
+                {message.type === "success" ? (
+                  <CheckCircle2 className="h-4 w-4" />
+                ) : (
+                  <AlertCircle className="h-4 w-4" />
                 )}
-              />
-              <FormField
-                control={form.control}
-                name="legalNotice"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Mentions légales</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        placeholder="Ex: TVA non applicable, art. 293 B du CGI / Assurance décennale : ..."
-                        className="min-h-[100px]"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </CardContent>
-          </Card>
+                <AlertDescription>{message.text}</AlertDescription>
+              </Alert>
+            )}
 
-          <Separator />
-
-          {message && (
-            <Alert
-              variant={message.type === "success" ? "success" : "destructive"}
-            >
-              {message.type === "success" ? (
-                <CheckCircle2 className="h-4 w-4" />
-              ) : (
-                <AlertCircle className="h-4 w-4" />
-              )}
-              <AlertDescription>{message.text}</AlertDescription>
-            </Alert>
-          )}
-
-          <div className="flex justify-end">
-            <Button type="submit" disabled={isPending}>
-              {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Enregistrer les modifications
-            </Button>
-          </div>
-        </form>
-      </Form>
+            {/* Submit Button */}
+            <div className="flex justify-end">
+              <Button
+                type="submit"
+                disabled={isPending}
+                className="bg-orange-600 hover:bg-orange-700 text-white"
+              >
+                {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Enregistrer les modifications
+              </Button>
+            </div>
+          </form>
+        </Form>
+      </div>
     </div>
   );
 }

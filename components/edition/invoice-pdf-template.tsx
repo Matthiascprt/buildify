@@ -219,6 +219,7 @@ const formatPrice = (value: number | undefined): string => {
 };
 
 interface LineItem {
+  lineId: string;
   id: string;
   designation: string;
   description?: string;
@@ -381,9 +382,9 @@ export function InvoicePDFTemplate({
               Total TTC
             </Text>
           </View>
-          {data.items.map((item, index) => (
+          {data.items.map((item) => (
             <View
-              key={`${item.id}-${index}`}
+              key={item.lineId}
               style={item.isSection ? styles.tableSectionRow : styles.tableRow}
             >
               <Text
