@@ -1,6 +1,13 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  forwardRef,
+  useImperativeHandle,
+} from "react";
 import {
   Send,
   Mic,
@@ -25,6 +32,11 @@ import type { Company, Client } from "@/lib/supabase/types";
 import { ClientPickerModal } from "./client-picker-modal";
 import { NewClientModal } from "./new-client-modal";
 
+export interface ChatRef {
+  sendMessage: (content: string) => Promise<void>;
+  isLoading: boolean;
+}
+
 interface Message {
   id: string;
   role: "user" | "assistant";
@@ -46,20 +58,23 @@ interface ChatProps {
   onSwitchToPreview?: () => void;
 }
 
-export function Chat({
-  userInitial = "U",
-  company,
-  clients,
-  document,
-  onDocumentChange,
-  nextQuoteNumber,
-  nextInvoiceNumber,
-  isEditingExisting: initialIsEditingExisting = false,
-  accentColor,
-  onAccentColorChange,
-  onClientCreated,
-  onSwitchToPreview,
-}: ChatProps) {
+export const Chat = forwardRef<ChatRef, ChatProps>(function Chat(
+  {
+    userInitial = "U",
+    company,
+    clients,
+    document,
+    onDocumentChange,
+    nextQuoteNumber,
+    nextInvoiceNumber,
+    isEditingExisting: initialIsEditingExisting = false,
+    accentColor,
+    onAccentColorChange,
+    onClientCreated,
+    onSwitchToPreview,
+  },
+  ref,
+) {
   const [isEditingExisting, setIsEditingExisting] = useState(
     initialIsEditingExisting,
   );
@@ -222,129 +237,161 @@ export function Chat({
     }
   }, [document]);
 
-  const sendMessage = async (
-    content: string,
-    overrideDocument?: DocumentData | null,
-    isFirstUserMessage?: boolean,
-  ) => {
-    if (isFirstUserMessage) {
-      setShowQuickActions(false);
-    }
+  const sendMessage = useCallback(
+    async (
+      content: string,
+      overrideDocument?: DocumentData | null,
+      isFirstUserMessage?: boolean,
+    ) => {
+      if (isFirstUserMessage) {
+        setShowQuickActions(false);
+      }
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: "user",
-      content,
-    };
+      const userMessage: Message = {
+        id: Date.now().toString(),
+        role: "user",
+        content,
+      };
 
-    const newMessages = [...messages, userMessage];
-    setMessages(newMessages);
-    setInput("");
-    setIsLoading(true);
+      const newMessages = [...messages, userMessage];
+      setMessages(newMessages);
+      setInput("");
+      setIsLoading(true);
 
-    const documentToSend =
-      overrideDocument !== undefined ? overrideDocument : document;
+      const documentToSend =
+        overrideDocument !== undefined ? overrideDocument : document;
 
-    try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          messages: newMessages.map((msg) => ({
-            role: msg.role,
-            content: msg.content,
-          })),
-          document: documentToSend,
-          company,
-          clients,
-          nextQuoteNumber,
-          nextInvoiceNumber,
-          accentColor,
-          isFirstMessage: isFirstUserMessage,
-        }),
-      });
+      try {
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            messages: newMessages.map((msg) => ({
+              role: msg.role,
+              content: msg.content,
+            })),
+            document: documentToSend,
+            company,
+            clients,
+            nextQuoteNumber,
+            nextInvoiceNumber,
+            accentColor,
+            isFirstMessage: isFirstUserMessage,
+          }),
+        });
 
-      const data = await response.json();
+        const data = await response.json();
 
-      if (response.ok) {
-        const assistantMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          role: "assistant",
-          content: data.message,
-        };
-        setMessages((prev) => [...prev, assistantMessage]);
+        if (response.ok) {
+          const assistantMessage: Message = {
+            id: (Date.now() + 1).toString(),
+            role: "assistant",
+            content: data.message,
+          };
+          setMessages((prev) => [...prev, assistantMessage]);
 
-        if (data.document !== undefined) {
-          onDocumentChange(data.document);
-        }
-
-        // Handle accent color change from AI
-        if (data.accentColor !== undefined && onAccentColorChange) {
-          onAccentColorChange(data.accentColor);
-        }
-
-        // Handle new client created by AI
-        if (data.newClient && onClientCreated) {
-          onClientCreated(data.newClient);
-        }
-
-        // Handle validity date update for quotes
-        if (
-          data.validityUpdate &&
-          data.document?.id &&
-          data.document?.type === "quote"
-        ) {
-          try {
-            await fetch(`/api/documents?id=${data.document.id}&type=quote`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                valid_until: data.validityUpdate.validUntil,
-              }),
-            });
-          } catch (error) {
-            console.error("Failed to update validity date:", error);
+          if (data.document !== undefined) {
+            onDocumentChange(data.document);
           }
-        }
 
-        // Handle due date update for invoices
-        if (
-          data.dueDateUpdate &&
-          data.document?.id &&
-          data.document?.type === "invoice"
-        ) {
-          try {
-            await fetch(`/api/documents?id=${data.document.id}&type=invoice`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ due_date: data.dueDateUpdate.dueDateDb }),
-            });
-          } catch (error) {
-            console.error("Failed to update due date:", error);
+          // Handle accent color change from AI
+          if (data.accentColor !== undefined && onAccentColorChange) {
+            onAccentColorChange(data.accentColor);
           }
+
+          // Handle new client created by AI
+          if (data.newClient && onClientCreated) {
+            onClientCreated(data.newClient);
+          }
+
+          // Handle validity date update for quotes
+          if (
+            data.validityUpdate &&
+            data.document?.id &&
+            data.document?.type === "quote"
+          ) {
+            try {
+              await fetch(`/api/documents?id=${data.document.id}&type=quote`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  valid_until: data.validityUpdate.validUntil,
+                }),
+              });
+            } catch (error) {
+              console.error("Failed to update validity date:", error);
+            }
+          }
+
+          // Handle due date update for invoices
+          if (
+            data.dueDateUpdate &&
+            data.document?.id &&
+            data.document?.type === "invoice"
+          ) {
+            try {
+              await fetch(
+                `/api/documents?id=${data.document.id}&type=invoice`,
+                {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    due_date: data.dueDateUpdate.dueDateDb,
+                  }),
+                },
+              );
+            } catch (error) {
+              console.error("Failed to update due date:", error);
+            }
+          }
+        } else {
+          const errorMessage: Message = {
+            id: (Date.now() + 1).toString(),
+            role: "assistant",
+            content: "Désolé, une erreur est survenue. Veuillez réessayer.",
+          };
+          setMessages((prev) => [...prev, errorMessage]);
         }
-      } else {
+      } catch {
         const errorMessage: Message = {
           id: (Date.now() + 1).toString(),
           role: "assistant",
-          content: "Désolé, une erreur est survenue. Veuillez réessayer.",
+          content:
+            "Désolé, une erreur de connexion est survenue. Veuillez réessayer.",
         };
         setMessages((prev) => [...prev, errorMessage]);
+      } finally {
+        setIsLoading(false);
       }
-    } catch {
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content:
-          "Désolé, une erreur de connexion est survenue. Veuillez réessayer.",
-      };
-      setMessages((prev) => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    },
+    [
+      messages,
+      document,
+      company,
+      clients,
+      nextQuoteNumber,
+      nextInvoiceNumber,
+      accentColor,
+      onDocumentChange,
+      onAccentColorChange,
+      onClientCreated,
+    ],
+  );
+
+  // Expose sendMessage and isLoading to parent via ref
+  useImperativeHandle(
+    ref,
+    () => ({
+      sendMessage: async (content: string) => {
+        if (!content.trim() || isLoading) return;
+        await sendMessage(content.trim());
+      },
+      isLoading,
+    }),
+    [isLoading, sendMessage],
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -888,4 +935,4 @@ export function Chat({
       </form>
     </div>
   );
-}
+});

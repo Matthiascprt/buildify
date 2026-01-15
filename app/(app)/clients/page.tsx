@@ -112,8 +112,18 @@ export default function ClientsPage() {
       const data = await getClients();
       setClients(data);
       setIsLoading(false);
+
+      // Check if we need to open a specific client from URL params
+      const clientId = searchParams.get("id");
+      if (clientId) {
+        const clientToOpen = data.find((c) => c.id === clientId);
+        if (clientToOpen) {
+          handleSelectClient(clientToOpen);
+        }
+      }
     }
     loadClients();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleSelectClient = (client: Client) => {

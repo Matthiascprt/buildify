@@ -4,7 +4,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { Send, Mic, MicOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Chat } from "@/components/edition/chat";
+import { Chat, type ChatRef } from "@/components/edition/chat";
 import { DocumentPreview } from "@/components/edition/document-preview";
 import type { DocumentData, LineItem, QuoteData } from "@/lib/types/document";
 import {
@@ -50,6 +50,7 @@ export function EditionClient({
     initialAccentColor,
   );
   const [mobileView, setMobileView] = useState<"chat" | "preview">("chat");
+  const chatRef = useRef<ChatRef>(null);
 
   // Sync document state when initialDocument changes (e.g., navigating to another document)
   useEffect(() => {
@@ -454,58 +455,18 @@ export function EditionClient({
 
   // Mobile chat input state
   const [mobileInput, setMobileInput] = useState("");
-  const [isMobileLoading, setIsMobileLoading] = useState(false);
   const [isMobileRecording, setIsMobileRecording] = useState(false);
   const mobileRecognitionRef = useRef<SpeechRecognition | null>(null);
 
   const handleMobileSendMessage = useCallback(async () => {
-    if (!mobileInput.trim() || isMobileLoading || !document) return;
+    if (!mobileInput.trim() || chatRef.current?.isLoading || !document) return;
 
-    setIsMobileLoading(true);
     const messageContent = mobileInput.trim();
     setMobileInput("");
 
-    try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: [{ role: "user", content: messageContent }],
-          document,
-          company,
-          clients,
-          nextQuoteNumber,
-          nextInvoiceNumber,
-          accentColor,
-          isFirstMessage: false,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok && data.document !== undefined) {
-        handleDocumentChange(data.document);
-      }
-
-      if (data.accentColor !== undefined) {
-        setAccentColor(data.accentColor);
-      }
-    } catch (error) {
-      console.error("Mobile chat error:", error);
-    } finally {
-      setIsMobileLoading(false);
-    }
-  }, [
-    mobileInput,
-    isMobileLoading,
-    document,
-    company,
-    clients,
-    nextQuoteNumber,
-    nextInvoiceNumber,
-    accentColor,
-    handleDocumentChange,
-  ]);
+    // Use the Chat component's sendMessage via ref to keep messages synchronized
+    await chatRef.current?.sendMessage(messageContent);
+  }, [mobileInput, document]);
 
   const toggleMobileRecording = useCallback(() => {
     if (isMobileRecording) {
@@ -591,7 +552,7 @@ export function EditionClient({
         <Button
           type="submit"
           size="icon"
-          disabled={!mobileInput.trim() || isMobileLoading}
+          disabled={!mobileInput.trim() || chatRef.current?.isLoading}
         >
           <Send className="h-4 w-4" />
         </Button>
@@ -615,6 +576,7 @@ export function EditionClient({
         }`}
       >
         <Chat
+          ref={chatRef}
           userInitial={userInitial}
           company={company}
           clients={clients}
