@@ -13,6 +13,7 @@ import {
   Palette,
   AlertTriangle,
   MessageSquare,
+  PenLine,
 } from "lucide-react";
 import { HexColorPicker } from "react-colorful";
 import { pdf } from "@react-pdf/renderer";
@@ -40,6 +41,7 @@ import {
 } from "@/components/ui/dialog";
 import { QuoteTemplate } from "./quote-template";
 import { InvoiceTemplate } from "./invoice-template";
+import { SignatureModal } from "./signature-modal";
 import { ClientDocuments } from "@/components/clients/client-documents";
 import { updateClient, deleteClient } from "@/lib/supabase/api";
 import type {
@@ -175,6 +177,7 @@ export function DocumentPreview({
     type: "particulier" as ClientType,
   });
   const [clientEditError, setClientEditError] = useState<string | null>(null);
+  const [showSignatureModal, setShowSignatureModal] = useState(false);
   const documentRef = useRef<HTMLDivElement>(null);
   const colorPickerRef = useRef<HTMLDivElement>(null);
 
@@ -357,6 +360,12 @@ export function DocumentPreview({
     setShowConvertConfirm(false);
   };
 
+  const handleSignatureSave = (signature: string) => {
+    if (onDocumentUpdate) {
+      onDocumentUpdate("signature", signature);
+    }
+  };
+
   const handleDownloadPDF = async () => {
     if (!document) return;
 
@@ -368,6 +377,7 @@ export function DocumentPreview({
           <QuotePDFTemplate
             data={mapToQuoteTemplateData(document)}
             accentColor={accentColor}
+            signature={document.signature}
           />
         ) : (
           <InvoicePDFTemplate
@@ -561,6 +571,17 @@ export function DocumentPreview({
                   <Receipt className="h-4 w-4 text-muted-foreground" />
                 </Button>
               )}
+              {document.type === "quote" && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 rounded-full bg-muted hover:bg-muted/80"
+                  onClick={() => setShowSignatureModal(true)}
+                  title="Signer le document"
+                >
+                  <PenLine className="h-4 w-4 text-muted-foreground" />
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="icon"
@@ -646,6 +667,7 @@ export function DocumentPreview({
                   onLineMouseDown={handleLineMouseDown}
                   onLineMouseEnter={handleLineMouseEnter}
                   accentColor={accentColor}
+                  signature={document.signature}
                 />
               </div>
             ) : (
@@ -921,6 +943,16 @@ export function DocumentPreview({
         <div className="2xl:hidden border-t bg-background">
           {mobileInputComponent}
         </div>
+      )}
+
+      {/* Signature Modal */}
+      {document?.type === "quote" && (
+        <SignatureModal
+          open={showSignatureModal}
+          onOpenChange={setShowSignatureModal}
+          onSave={handleSignatureSave}
+          existingSignature={document.signature}
+        />
       )}
     </div>
   );

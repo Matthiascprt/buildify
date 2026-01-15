@@ -136,6 +136,12 @@ ${documentContext}
 - "En fait TTC" → si l'utilisateur a donné un prix TTC, convertis: 60€ TTC à 20% → 50€ HT
 - "Peins 3m2 à 25€ HT" → ajoute ligne: designation="Peinture murale", description="Application deux couches", quantity=3, unit_price_ht=25 + set_project_title si vide
 - "Pour Mr Martin" → cherche/crée client Martin et associe
+- "Télécharge le PDF" → utilise download_pdf pour télécharger le document
+- "Transforme en facture" → utilise convert_quote_to_invoice (uniquement si c'est un devis)
+
+# ACTIONS SPECIALES
+- download_pdf: Télécharge le document actuel en PDF. Utilise quand l'utilisateur demande de télécharger, exporter, ou obtenir le PDF.
+- convert_quote_to_invoice: Convertit le devis actuel en facture. Utilise quand l'utilisateur demande de transformer, convertir, ou passer le devis en facture. Ne fonctionne que si le document actuel est un devis.
 
 # FORMAT DE SORTIE OBLIGATOIRE
 Tu DOIS toujours utiliser les tools pour modifier le document.

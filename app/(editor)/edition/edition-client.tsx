@@ -2,11 +2,19 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { Send, Mic, MicOff } from "lucide-react";
+import { pdf } from "@react-pdf/renderer";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Chat, type ChatRef } from "@/components/edition/chat";
 import { DocumentPreview } from "@/components/edition/document-preview";
-import type { DocumentData, LineItem, QuoteData } from "@/lib/types/document";
+import { QuotePDFTemplate } from "@/components/edition/quote-pdf-template";
+import { InvoicePDFTemplate } from "@/components/edition/invoice-pdf-template";
+import type {
+  DocumentData,
+  LineItem,
+  QuoteData,
+  InvoiceData,
+} from "@/lib/types/document";
 import {
   calculateTotals,
   calculateLineTotal,
@@ -453,6 +461,109 @@ export function EditionClient({
     });
   }, []);
 
+  const handleDownloadPdf = useCallback(async () => {
+    if (!document) return;
+
+    const mapToQuoteTemplateData = (doc: QuoteData) => ({
+      number: doc.number,
+      date: doc.date,
+      validity: doc.validity,
+      company: {
+        name: doc.company.name,
+        address: doc.company.address,
+        city: doc.company.city,
+        phone: doc.company.phone,
+        email: doc.company.email,
+        siret: doc.company.siret,
+        logoUrl: doc.company.logoUrl,
+        paymentTerms: doc.company.paymentTerms,
+        legalNotice: doc.company.legalNotice,
+      },
+      client: {
+        name: doc.client.name,
+        address: doc.client.address,
+        city: doc.client.city,
+        phone: doc.client.phone,
+        email: doc.client.email,
+        siret: doc.client.siret,
+      },
+      projectTitle: doc.projectTitle,
+      items: doc.items,
+      totalHT: doc.totalHT,
+      tvaRate: doc.tvaRate,
+      tvaAmount: doc.tvaAmount,
+      deposit: doc.deposit,
+      totalTTC: doc.totalTTC,
+      paymentConditions: doc.paymentConditions,
+    });
+
+    const mapToInvoiceTemplateData = (doc: InvoiceData) => ({
+      number: doc.number,
+      date: doc.date,
+      dueDate: doc.dueDate,
+      company: {
+        name: doc.company.name,
+        address: doc.company.address,
+        city: doc.company.city,
+        phone: doc.company.phone,
+        email: doc.company.email,
+        siret: doc.company.siret,
+        logoUrl: doc.company.logoUrl,
+        paymentTerms: doc.company.paymentTerms,
+        legalNotice: doc.company.legalNotice,
+      },
+      client: {
+        name: doc.client.name,
+        address: doc.client.address,
+        city: doc.client.city,
+        phone: doc.client.phone,
+        email: doc.client.email,
+        siret: doc.client.siret,
+      },
+      projectTitle: doc.projectTitle,
+      items: doc.items,
+      totalHT: doc.totalHT,
+      tvaRate: doc.tvaRate,
+      tvaAmount: doc.tvaAmount,
+      deposit: doc.deposit,
+      totalTTC: doc.totalTTC,
+      paymentConditions: doc.paymentConditions,
+    });
+
+    try {
+      const pdfDocument =
+        document.type === "quote" ? (
+          <QuotePDFTemplate
+            data={mapToQuoteTemplateData(document as QuoteData)}
+            accentColor={accentColor}
+          />
+        ) : (
+          <InvoicePDFTemplate
+            data={mapToInvoiceTemplateData(document as InvoiceData)}
+            accentColor={accentColor}
+          />
+        );
+
+      const blob = await pdf(pdfDocument).toBlob();
+
+      const fileName =
+        document.type === "quote"
+          ? `Devis_${document.number}.pdf`
+          : `Facture_${document.number}.pdf`;
+
+      const url = URL.createObjectURL(blob);
+      const link = window.document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      window.document.body.appendChild(link);
+      link.click();
+      window.document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+    }
+  }, [document, accentColor]);
+
   // Mobile chat input state
   const [mobileInput, setMobileInput] = useState("");
   const [isMobileRecording, setIsMobileRecording] = useState(false);
@@ -589,6 +700,8 @@ export function EditionClient({
           onAccentColorChange={handleAccentColorChange}
           onClientCreated={handleClientCreated}
           onSwitchToPreview={() => setMobileView("preview")}
+          onDownloadPdf={handleDownloadPdf}
+          onConvertToInvoice={handleConvertToInvoice}
         />
       </div>
 

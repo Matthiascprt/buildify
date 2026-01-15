@@ -72,6 +72,7 @@ export interface DocumentContent {
   project_title: string;
   lines: DocumentLine[];
   totals: DocumentTotals;
+  signature?: string;
 }
 
 // Table quotes (matches actual Supabase schema)

@@ -231,6 +231,30 @@ export const documentTools: ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "download_pdf",
+      description:
+        "Download the current document as a PDF file. Use this when the user asks to download, export, or get the PDF of the document.",
+      parameters: {
+        type: "object",
+        properties: {},
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "convert_quote_to_invoice",
+      description:
+        "Convert the current quote (devis) into an invoice (facture). Only works if the current document is a quote. Use this when the user asks to transform, convert, or turn the quote into an invoice.",
+      parameters: {
+        type: "object",
+        properties: {},
+      },
+    },
+  },
 ];
 
 interface ToolContext {
@@ -250,6 +274,8 @@ interface ToolResult {
   updatedClient?: { id: string; updates: Record<string, string | undefined> };
   validityUpdate?: { validity: string; validUntil: string };
   dueDateUpdate?: { dueDate: string; dueDateDb: string };
+  downloadPdf?: boolean;
+  convertToInvoice?: boolean;
 }
 
 function recalculateDocumentTotals(document: DocumentData): DocumentData {
@@ -585,6 +611,40 @@ export async function executeToolCall(
         message: `Client mis à jour.`,
         document: updatedDocument,
         updatedClient: { id: document.client.id, updates },
+      };
+    }
+
+    case "download_pdf": {
+      if (!document) {
+        return {
+          success: false,
+          message: "Aucun document à télécharger.",
+        };
+      }
+      return {
+        success: true,
+        message: "Téléchargement du PDF en cours...",
+        downloadPdf: true,
+      };
+    }
+
+    case "convert_quote_to_invoice": {
+      if (!document) {
+        return {
+          success: false,
+          message: "Aucun document à convertir.",
+        };
+      }
+      if (document.type !== "quote") {
+        return {
+          success: false,
+          message: "Seuls les devis peuvent être convertis en facture.",
+        };
+      }
+      return {
+        success: true,
+        message: "Conversion du devis en facture...",
+        convertToInvoice: true,
       };
     }
 

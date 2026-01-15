@@ -56,6 +56,7 @@ export interface QuoteData {
   totalTTC: number;
   paymentConditions: string;
   legalNotice?: string;
+  signature?: string;
 }
 
 export interface InvoiceData {
@@ -314,6 +315,7 @@ export function documentDataToContent(doc: DocumentData): DocumentContent {
       total_vat: doc.tvaAmount,
       total_ttc: doc.totalTTC,
     },
+    signature: doc.type === "quote" ? doc.signature : undefined,
   };
 }
 
@@ -392,6 +394,7 @@ export function quoteToDocumentData(
     totalTTC: quote.content?.totals?.total_ttc || 0,
     paymentConditions: company.payment_terms || "",
     legalNotice: company.legal_notice || undefined,
+    signature: quote.content?.signature,
   };
 }
 

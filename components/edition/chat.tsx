@@ -56,6 +56,8 @@ interface ChatProps {
   onAccentColorChange?: (color: string | null) => void;
   onClientCreated?: (client: Client) => void;
   onSwitchToPreview?: () => void;
+  onDownloadPdf?: () => void;
+  onConvertToInvoice?: () => Promise<{ success: boolean; error?: string }>;
 }
 
 export const Chat = forwardRef<ChatRef, ChatProps>(function Chat(
@@ -72,6 +74,8 @@ export const Chat = forwardRef<ChatRef, ChatProps>(function Chat(
     onAccentColorChange,
     onClientCreated,
     onSwitchToPreview,
+    onDownloadPdf,
+    onConvertToInvoice,
   },
   ref,
 ) {
@@ -346,6 +350,16 @@ export const Chat = forwardRef<ChatRef, ChatProps>(function Chat(
               console.error("Failed to update due date:", error);
             }
           }
+
+          // Handle PDF download request from AI
+          if (data.downloadPdf && onDownloadPdf) {
+            onDownloadPdf();
+          }
+
+          // Handle convert to invoice request from AI
+          if (data.convertToInvoice && onConvertToInvoice) {
+            await onConvertToInvoice();
+          }
         } else {
           const errorMessage: Message = {
             id: (Date.now() + 1).toString(),
@@ -377,6 +391,8 @@ export const Chat = forwardRef<ChatRef, ChatProps>(function Chat(
       onDocumentChange,
       onAccentColorChange,
       onClientCreated,
+      onDownloadPdf,
+      onConvertToInvoice,
     ],
   );
 

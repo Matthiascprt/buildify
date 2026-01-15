@@ -161,6 +161,7 @@ interface QuoteTemplateProps {
   onLineMouseDown?: (lineIndex: number) => void;
   onLineMouseEnter?: (lineIndex: number) => void;
   accentColor?: string | null;
+  signature?: string;
 }
 
 export function QuoteTemplate({
@@ -172,6 +173,7 @@ export function QuoteTemplate({
   onLineMouseDown,
   onLineMouseEnter,
   accentColor,
+  signature,
 }: QuoteTemplateProps) {
   const hasCustomColor = accentColor !== null && accentColor !== undefined;
   const textColor = hasCustomColor ? getContrastColor(accentColor) : undefined;
@@ -472,8 +474,17 @@ export function QuoteTemplate({
         <div className="text-right">
           <p className="font-semibold">Lu et approuvé</p>
           <p className="text-muted-foreground">Le : {data.date}</p>
-          <p className="text-muted-foreground mb-8">Signature :</p>
-          <div className="w-40 border-b border-border"></div>
+          <p className="text-muted-foreground mb-2">Signature :</p>
+          {signature ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={signature}
+              alt="Signature"
+              className="w-40 h-16 object-contain ml-auto"
+            />
+          ) : (
+            <div className="w-40 h-8 border-b border-border"></div>
+          )}
         </div>
       </div>
 

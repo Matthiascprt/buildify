@@ -1,142 +1,1633 @@
+"use client";
+
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { FileText, Mic, Zap } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Check,
+  Shield,
+  FileCheck,
+  Sparkles,
+  Twitter,
+  Linkedin,
+  ArrowRight,
+  Send,
+  Mic,
+  Star,
+  Quote,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { BorderBeam } from "@/components/ui/border-beam";
+
+const pricingPlans = [
+  {
+    name: "Solo",
+    description: "Parfait pour les artisans indépendants",
+    price: "19",
+    features: [
+      "Devis et factures illimités",
+      "Dictée vocale IA",
+      "Export PDF professionnel",
+      "Calcul TVA automatique",
+      "Signature électronique",
+      "Support par email",
+    ],
+    cta: "Commencer gratuitement",
+    popular: false,
+  },
+  {
+    name: "PME",
+    description: "Pour les équipes jusqu'à 10 personnes",
+    price: "49",
+    features: [
+      "Tout du plan Solo",
+      "Jusqu'à 10 utilisateurs",
+      "Tableau de bord équipe",
+      "Statistiques avancées",
+      "Gestion des clients",
+      "Support prioritaire",
+      "Formation personnalisée",
+    ],
+    cta: "Essai gratuit 14 jours",
+    popular: true,
+  },
+];
+
+const faqItems = [
+  {
+    question: "Mes données sont-elles sécurisées ?",
+    answer:
+      "Absolument. Vos données sont hébergées sur des serveurs sécurisés en Europe, avec chiffrement SSL/TLS. Nous sommes conformes au RGPD et vos documents ne sont jamais partagés avec des tiers. Vous restez propriétaire de toutes vos données.",
+  },
+  {
+    question: "Les documents sont-ils conformes fiscalement ?",
+    answer:
+      "Oui, tous nos devis et factures respectent les obligations légales françaises : mentions obligatoires, numérotation chronologique, archivage conforme. Nous mettons à jour automatiquement les modèles selon les évolutions réglementaires.",
+  },
+  {
+    question: "Je ne suis pas à l'aise avec la technologie, c'est compliqué ?",
+    answer:
+      "Buildify est conçu pour être le plus simple possible. Vous parlez, l'IA fait le reste. Pas besoin de formation, pas de menu compliqué. En 2 minutes, vous créez votre premier devis. Et notre support est là si vous avez la moindre question.",
+  },
+  {
+    question: "Puis-je essayer avant de m'engager ?",
+    answer:
+      "Bien sûr ! Vous bénéficiez de 14 jours d'essai gratuit, sans carte bancaire. Testez toutes les fonctionnalités et décidez ensuite si Buildify vous convient.",
+  },
+];
+
+const testimonials = [
+  {
+    name: "Laurent M.",
+    role: "Plombier-chauffagiste",
+    location: "Lyon",
+    content:
+      "Avant Buildify, je passais mes soirées à faire mes devis sur Excel. Maintenant, je dicte tout dans le camion entre deux chantiers. Ma femme me remercie !",
+    avatar: "https://randomuser.me/api/portraits/men/32.jpg",
+  },
+  {
+    name: "Sophie D.",
+    role: "Électricienne",
+    location: "Bordeaux",
+    content:
+      "J'étais sceptique au début, mais l'IA comprend vraiment le jargon du métier. Plus besoin de tout retaper, mes devis sont propres du premier coup.",
+    avatar: "https://randomuser.me/api/portraits/women/44.jpg",
+  },
+  {
+    name: "Marc B.",
+    role: "Maçon",
+    location: "Marseille",
+    content:
+      "Avec mon équipe de 3 gars, on perdait un temps fou sur la paperasse. Buildify nous a changé la vie. On facture plus vite, on est payé plus vite.",
+    avatar: "https://randomuser.me/api/portraits/men/67.jpg",
+  },
+];
+
+const themeColors = [
+  { primary: "#ea580c", name: "Orange" },
+  { primary: "#2563eb", name: "Bleu" },
+  { primary: "#059669", name: "Vert" },
+];
+
+const MAX_AVATAR_URL =
+  "https://ckvcijpgohqlnvoinwmc.supabase.co/storage/v1/object/public/buildify-assets/Logo/Agent%20IA.png";
+
+const heroChatMessages = [
+  { type: "ai", text: "Bonjour ! Que souhaitez-vous créer ?", delay: 0.6 },
+  {
+    type: "user",
+    text: "Devis pour M. Dupont, rénovation salle de bain : dépose 15m² à 25€/m², faïence 25m² à 85€/m², douche 1 550€",
+    delay: 2.2,
+  },
+  { type: "typing", delay: 3.5 },
+  {
+    type: "ai",
+    text: "Parfait ! Devis créé : 3 postes, total 4 455 € TTC. Modifier quelque chose ?",
+    delay: 4.2,
+  },
+  {
+    type: "user",
+    text: "Mets la couleur en bleu et monte la douche à 1 800€",
+    delay: 6,
+  },
+  { type: "typing", delay: 7 },
+  {
+    type: "ai",
+    text: "C'est fait ! Couleur bleue et douche à 1 800€. Nouveau total : 4 730 € TTC",
+    delay: 7.8,
+  },
+];
+
+const heroQuoteLines = [
+  {
+    num: 1,
+    title: "Dépose carrelage",
+    desc: "Évacuation gravats",
+    qty: "15m²",
+    price: "25€",
+    tva: "10%",
+    total: "412,50€",
+    delay: 3.6,
+  },
+  {
+    num: 2,
+    title: "Pose faïence murale",
+    desc: "Fourniture et pose",
+    qty: "25m²",
+    price: "85€",
+    tva: "10%",
+    total: "2 337,50€",
+    delay: 3.9,
+  },
+  {
+    num: 3,
+    title: "Douche italienne",
+    desc: "Receveur + paroi",
+    qty: "1",
+    price: "1 550€",
+    tva: "10%",
+    total: "1 705,00€",
+    delay: 4.2,
+  },
+];
+
+function HeroDemo() {
+  const [visibleMessages, setVisibleMessages] = useState<number[]>([]);
+  const [visibleLines, setVisibleLines] = useState<number[]>([]);
+  const [showTotals, setShowTotals] = useState(false);
+  const [showTyping, setShowTyping] = useState(false);
+  const [colorIndex, setColorIndex] = useState(0);
+  const [animationKey, setAnimationKey] = useState(0);
+  const [priceUpdated, setPriceUpdated] = useState(false);
+
+  const currentTheme = themeColors[colorIndex];
+
+  useEffect(() => {
+    const timers: NodeJS.Timeout[] = [];
+
+    timers.push(
+      setTimeout(() => {
+        setVisibleMessages([]);
+        setVisibleLines([]);
+        setShowTotals(false);
+        setShowTyping(false);
+        setPriceUpdated(false);
+        setColorIndex(0);
+      }, 0),
+    );
+
+    heroChatMessages.forEach((msg, index) => {
+      if (msg.type === "typing") {
+        timers.push(setTimeout(() => setShowTyping(true), msg.delay * 1000));
+        timers.push(
+          setTimeout(() => setShowTyping(false), (msg.delay + 0.5) * 1000),
+        );
+      } else {
+        timers.push(
+          setTimeout(() => {
+            setVisibleMessages((prev) => [...prev, index]);
+          }, msg.delay * 1000),
+        );
+      }
+    });
+
+    heroQuoteLines.forEach((_, index) => {
+      timers.push(
+        setTimeout(() => {
+          setVisibleLines((prev) => [...prev, index]);
+        }, heroQuoteLines[index].delay * 1000),
+      );
+    });
+
+    timers.push(setTimeout(() => setShowTotals(true), 4.5 * 1000));
+    timers.push(
+      setTimeout(() => {
+        setColorIndex(1);
+        setPriceUpdated(true);
+      }, 7.8 * 1000),
+    );
+    timers.push(
+      setTimeout(() => {
+        setAnimationKey((prev) => prev + 1);
+      }, 10.5 * 1000),
+    );
+
+    return () => timers.forEach((t) => clearTimeout(t));
+  }, [animationKey]);
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 min-h-[700px] lg:min-h-[520px]">
+      {/* Left: Chat Interface */}
+      <div className="border-b lg:border-b-0 lg:border-r border-zinc-100 flex flex-col min-h-[320px] lg:min-h-0">
+        <div className="px-4 py-3 border-b border-zinc-100">
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <Image
+                src={MAX_AVATAR_URL}
+                alt="Max"
+                width={40}
+                height={40}
+                className="rounded-full object-cover"
+                unoptimized
+              />
+              <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-white" />
+            </div>
+            <div>
+              <p className="font-semibold text-sm">Max</p>
+              <p className="text-xs text-zinc-500">Assistant IA</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-1 p-4 overflow-y-auto flex flex-col gap-3">
+          {heroChatMessages.map((msg, index) => {
+            if (msg.type === "typing") return null;
+
+            const isVisible = visibleMessages.includes(index);
+
+            if (msg.type === "ai") {
+              return (
+                <motion.div
+                  key={`msg-${animationKey}-${index}`}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={
+                    isVisible ? { opacity: 1, y: 0 } : { opacity: 0, y: 8 }
+                  }
+                  transition={{ duration: 0.5, ease: "easeOut" }}
+                  className="flex gap-2"
+                  style={{ display: isVisible ? "flex" : "none" }}
+                >
+                  <Image
+                    src={MAX_AVATAR_URL}
+                    alt="Max"
+                    width={28}
+                    height={28}
+                    className="w-7 h-7 rounded-full object-cover shrink-0"
+                    unoptimized
+                  />
+                  <div className="bg-zinc-100 rounded-2xl rounded-tl-md px-3 py-2 max-w-[85%]">
+                    <p className="text-sm">{msg.text}</p>
+                  </div>
+                </motion.div>
+              );
+            }
+
+            return (
+              <motion.div
+                key={`msg-${animationKey}-${index}`}
+                initial={{ opacity: 0, y: 8 }}
+                animate={
+                  isVisible ? { opacity: 1, y: 0 } : { opacity: 0, y: 8 }
+                }
+                transition={{ duration: 0.5, ease: "easeOut" }}
+                className="flex gap-2 justify-end"
+                style={{ display: isVisible ? "flex" : "none" }}
+              >
+                <div className="bg-primary text-white rounded-2xl rounded-tr-md px-3 py-2 max-w-[85%]">
+                  <p className="text-sm">{msg.text}</p>
+                </div>
+              </motion.div>
+            );
+          })}
+
+          {showTyping && (
+            <motion.div
+              key={`typing-${animationKey}`}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.4, ease: "easeOut" }}
+              className="flex gap-2"
+            >
+              <Image
+                src={MAX_AVATAR_URL}
+                alt="Max"
+                width={28}
+                height={28}
+                className="w-7 h-7 rounded-full object-cover shrink-0"
+                unoptimized
+              />
+              <div className="bg-zinc-100 rounded-2xl rounded-tl-md px-3 py-2.5">
+                <div className="flex gap-1.5 items-center h-4">
+                  <motion.span
+                    className="w-2 h-2 bg-zinc-400 rounded-full"
+                    animate={{ y: [0, -4, 0] }}
+                    transition={{
+                      duration: 0.6,
+                      repeat: Infinity,
+                      delay: 0,
+                    }}
+                  />
+                  <motion.span
+                    className="w-2 h-2 bg-zinc-400 rounded-full"
+                    animate={{ y: [0, -4, 0] }}
+                    transition={{
+                      duration: 0.6,
+                      repeat: Infinity,
+                      delay: 0.15,
+                    }}
+                  />
+                  <motion.span
+                    className="w-2 h-2 bg-zinc-400 rounded-full"
+                    animate={{ y: [0, -4, 0] }}
+                    transition={{
+                      duration: 0.6,
+                      repeat: Infinity,
+                      delay: 0.3,
+                    }}
+                  />
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </div>
+
+        <div className="p-4 border-t border-zinc-100">
+          <div className="flex gap-2">
+            <button className="w-10 h-10 rounded-lg border border-zinc-200 flex items-center justify-center text-zinc-500 hover:bg-zinc-50">
+              <Mic className="w-4 h-4" />
+            </button>
+            <div className="flex-1 h-10 px-4 rounded-lg border border-zinc-200 bg-zinc-50 flex items-center">
+              <span className="text-sm text-zinc-400">Tapez ou dictez...</span>
+            </div>
+            <button className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center text-white">
+              <Send className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Right: Document Preview */}
+      <div className="bg-zinc-50 p-3 lg:p-4 overflow-hidden min-h-[380px] lg:min-h-0">
+        <div className="bg-white rounded-lg border border-zinc-200 shadow-sm h-full overflow-hidden text-[10px] lg:text-[11px]">
+          <div className="flex justify-between items-start p-3 lg:p-4 pb-2 lg:pb-3">
+            <div className="flex items-center gap-1.5">
+              <svg
+                width="28"
+                height="28"
+                viewBox="0 0 32 32"
+                fill="none"
+                style={{ color: currentTheme.primary }}
+              >
+                <path
+                  d="M16 4L4 14V28H12V20H20V28H28V14L16 4Z"
+                  fill="currentColor"
+                  fillOpacity="0.15"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinejoin="round"
+                />
+                <rect
+                  x="22"
+                  y="8"
+                  width="4"
+                  height="6"
+                  fill="currentColor"
+                  fillOpacity="0.3"
+                />
+                <rect
+                  x="14"
+                  y="14"
+                  width="4"
+                  height="4"
+                  fill="currentColor"
+                  fillOpacity="0.4"
+                />
+              </svg>
+              <div className="leading-none">
+                <span
+                  className="font-bold text-[10px] block"
+                  style={{ color: currentTheme.primary }}
+                >
+                  MARTIN
+                </span>
+                <span className="text-[7px] text-zinc-500 tracking-wide">
+                  RÉNOVATION
+                </span>
+              </div>
+            </div>
+            <div className="text-right">
+              <h3 className="font-bold text-sm text-zinc-900">
+                Devis n° 2024-0047
+              </h3>
+              <p className="text-zinc-500 text-[10px]">Réalisé le 15/01/2024</p>
+              <p className="text-zinc-500 text-[10px]">Valable 1 mois</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 px-4 pb-3">
+            <div>
+              <p className="font-bold text-zinc-900 text-[11px] mb-0.5">
+                Martin Rénovation
+              </p>
+              <p className="text-zinc-500 text-[9px] leading-tight">
+                12 rue des Artisans
+                <br />
+                75011 Paris
+                <br />
+                06 12 34 56 78
+              </p>
+            </div>
+            <div>
+              <p className="font-bold text-zinc-900 text-[11px] mb-0.5">
+                M. Jean Dupont
+              </p>
+              <p className="text-zinc-500 text-[9px] leading-tight">
+                45 avenue Victor Hugo
+                <br />
+                75016 Paris
+                <br />
+                06 98 76 54 32
+              </p>
+            </div>
+          </div>
+
+          <div className="px-4 pb-2">
+            <h4 className="font-bold text-zinc-900">
+              Rénovation salle de bain complète
+            </h4>
+          </div>
+
+          <div className="px-4 pb-3">
+            <div className="border border-zinc-200 rounded overflow-hidden">
+              <table className="w-full">
+                <thead>
+                  <tr style={{ backgroundColor: `${currentTheme.primary}15` }}>
+                    <th
+                      className="px-1.5 py-1 text-left text-[9px] font-semibold"
+                      style={{ color: currentTheme.primary }}
+                    >
+                      #
+                    </th>
+                    <th
+                      className="px-1.5 py-1 text-left text-[9px] font-semibold"
+                      style={{ color: currentTheme.primary }}
+                    >
+                      Désignation
+                    </th>
+                    <th
+                      className="px-1.5 py-1 text-center text-[9px] font-semibold"
+                      style={{ color: currentTheme.primary }}
+                    >
+                      Qté
+                    </th>
+                    <th
+                      className="px-1.5 py-1 text-center text-[9px] font-semibold"
+                      style={{ color: currentTheme.primary }}
+                    >
+                      P.U. HT
+                    </th>
+                    <th
+                      className="px-1.5 py-1 text-center text-[9px] font-semibold"
+                      style={{ color: currentTheme.primary }}
+                    >
+                      TVA
+                    </th>
+                    <th
+                      className="px-1.5 py-1 text-right text-[9px] font-semibold"
+                      style={{ color: currentTheme.primary }}
+                    >
+                      Total TTC
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="text-[9px]">
+                  <AnimatePresence>
+                    {heroQuoteLines.map(
+                      (line, index) =>
+                        visibleLines.includes(index) && (
+                          <motion.tr
+                            key={line.num}
+                            initial={{ opacity: 0, backgroundColor: "#fef3c7" }}
+                            animate={{ opacity: 1, backgroundColor: "#ffffff" }}
+                            transition={{ duration: 0.5 }}
+                            className="border-t border-zinc-100"
+                          >
+                            <td className="px-1.5 py-1 text-zinc-500">
+                              {line.num}
+                            </td>
+                            <td className="px-1.5 py-1">
+                              <div className="font-medium text-zinc-900">
+                                {line.title}
+                              </div>
+                              <div className="text-zinc-400 text-[8px]">
+                                {line.desc}
+                              </div>
+                            </td>
+                            <td className="px-1.5 py-1 text-center text-zinc-500">
+                              {line.qty}
+                            </td>
+                            <td className="px-1.5 py-1 text-center text-zinc-500">
+                              {line.num === 3 && priceUpdated
+                                ? "1 800€"
+                                : line.price}
+                            </td>
+                            <td className="px-1.5 py-1 text-center text-zinc-500">
+                              {line.tva}
+                            </td>
+                            <td className="px-1.5 py-1 text-right font-medium">
+                              {line.num === 3 && priceUpdated
+                                ? "1 980,00€"
+                                : line.total}
+                            </td>
+                          </motion.tr>
+                        ),
+                    )}
+                  </AnimatePresence>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <AnimatePresence>
+            {showTotals && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4 }}
+                className="flex justify-end px-4 pb-3"
+              >
+                <div className="w-32 space-y-0.5 text-[10px]">
+                  <div className="flex justify-between">
+                    <span className="text-zinc-500">Total HT</span>
+                    <span>{priceUpdated ? "4 300,00 €" : "4 050,00 €"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-500">Total TVA</span>
+                    <span>{priceUpdated ? "430,00 €" : "405,00 €"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-500">Acompte</span>
+                    <span>-0,00 €</span>
+                  </div>
+                  <motion.div
+                    initial={{ scale: 0.9 }}
+                    animate={{ scale: 1 }}
+                    transition={{ delay: 0.2, type: "spring" }}
+                    className="flex justify-between font-bold border-t border-zinc-200 pt-0.5"
+                  >
+                    <span>Total TTC</span>
+                    <span style={{ color: currentTheme.primary }}>
+                      {priceUpdated ? "4 730,00 €" : "4 455,00 €"}
+                    </span>
+                  </motion.div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <div className="flex justify-between items-start px-4 pb-3 text-[9px]">
+            <div>
+              <p className="font-bold text-zinc-900 mb-0.5">
+                Conditions de paiement
+              </p>
+              <p className="text-zinc-500 max-w-[120px] leading-tight">
+                Acompte 30% à la commande, solde à réception
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="font-semibold text-zinc-900">Lu et approuvé</p>
+              <p className="text-zinc-500">Le : 15/01/2024</p>
+              <p className="text-zinc-500 mb-2">Signature :</p>
+              <div className="w-16 border-b border-zinc-300 ml-auto"></div>
+            </div>
+          </div>
+
+          <div className="px-4 pb-3 text-center">
+            <p className="text-[8px] text-zinc-400">
+              TVA non applicable, art. 293 B du CGI
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function LandingPage() {
   return (
     <div className="min-h-screen flex flex-col bg-white text-zinc-950">
       {/* Header */}
-      <header className="h-14 border-b border-zinc-200 flex items-center justify-between px-4 lg:px-6 sticky top-0 bg-white z-50">
-        <Link href="/" className="flex items-center gap-2 font-bold text-2xl">
-          <Image
-            src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/buildify-assets/Logo/icon (1).svg`}
-            alt="Buildify"
-            width={32}
-            height={32}
-            className="flex-shrink-0"
-            unoptimized
-          />
-          Buildify
-        </Link>
-        <div className="flex items-center gap-2">
-          <Link
-            href="/login"
-            className="h-9 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 rounded-md transition-colors"
-          >
-            Connexion
+      <header className="h-16 border-b border-zinc-200/80 flex items-center justify-between px-4 lg:px-8 sticky top-0 bg-white/80 backdrop-blur-lg z-50">
+        <div className="flex items-center gap-8">
+          <Link href="/" className="flex items-center gap-2 font-bold text-xl">
+            <Image
+              src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/buildify-assets/Logo/icon (1).svg`}
+              alt="Buildify"
+              width={32}
+              height={32}
+              className="flex-shrink-0"
+              unoptimized
+            />
+            Buildify
           </Link>
-          <Link
-            href="/register"
-            className="h-9 px-4 py-2 text-sm font-medium bg-orange-500 hover:bg-orange-600 text-white rounded-md transition-colors"
-          >
-            Commencer
-          </Link>
+          <nav className="hidden md:flex items-center gap-6">
+            <Link
+              href="#fonctionnalites"
+              className="text-sm text-zinc-600 hover:text-zinc-950 transition-colors"
+            >
+              Fonctionnalités
+            </Link>
+            <Link
+              href="#tarifs"
+              className="text-sm text-zinc-600 hover:text-zinc-950 transition-colors"
+            >
+              Tarifs
+            </Link>
+            <Link
+              href="#faq"
+              className="text-sm text-zinc-600 hover:text-zinc-950 transition-colors"
+            >
+              FAQ
+            </Link>
+          </nav>
+        </div>
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" asChild>
+            <Link href="/login">Connexion</Link>
+          </Button>
+          <Button asChild className="hidden sm:inline-flex">
+            <Link href="/register">Commencer</Link>
+          </Button>
         </div>
       </header>
 
-      {/* Hero */}
       <main className="flex-1">
-        <section className="py-12 lg:py-24 px-4">
-          <div className="max-w-4xl mx-auto text-center space-y-6">
-            <h1 className="text-3xl lg:text-5xl font-bold tracking-tight">
-              Créez vos devis et factures
-              <br />
-              <span className="text-zinc-500">en moins de 2 minutes</span>
-            </h1>
-            <p className="text-lg lg:text-xl text-zinc-500 max-w-2xl mx-auto">
-              Buildify utilise l&apos;IA pour vous aider à créer des documents
-              professionnels rapidement. Dictez, et c&apos;est fait.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-              <Link
-                href="/register"
-                className="h-10 px-6 inline-flex items-center justify-center text-sm font-medium bg-orange-500 hover:bg-orange-600 text-white rounded-md transition-colors"
+        {/* Hero Section */}
+        <section className="py-16 lg:py-24 px-4 relative overflow-hidden">
+          <div className="max-w-6xl mx-auto">
+            {/* Centered Hero Content */}
+            <div className="text-center space-y-6 mb-16">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
               >
-                Essayer gratuitement
-              </Link>
-              <Link
-                href="/login"
-                className="h-10 px-6 inline-flex items-center justify-center text-sm font-medium border border-zinc-300 bg-white hover:bg-zinc-50 text-zinc-900 rounded-md transition-colors"
+                <Badge
+                  variant="outline"
+                  className="px-3 py-1.5 text-sm font-medium border-orange-200 bg-orange-50 text-orange-700"
+                >
+                  <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+                  Nouveau : Créez vos devis et factures à la voix
+                </Badge>
+              </motion.div>
+
+              <motion.h1
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.1 }}
+                className="text-4xl lg:text-5xl xl:text-6xl font-bold tracking-tight leading-tight max-w-4xl mx-auto"
               >
-                Se connecter
-              </Link>
-            </div>
-          </div>
-        </section>
+                Artisans : Gagnez 1h chaque soir.{" "}
+                <span className="text-primary">Facturez à la voix.</span>
+              </motion.h1>
 
-        {/* Features */}
-        <section className="py-12 lg:py-24 px-4 bg-zinc-50">
-          <div className="max-w-5xl mx-auto">
-            <h2 className="text-2xl lg:text-3xl font-bold text-center mb-12">
-              Simple. Rapide. Efficace.
-            </h2>
-            <div className="grid md:grid-cols-3 gap-8">
-              <div className="text-center space-y-3">
-                <div className="w-12 h-12 rounded-lg bg-orange-100 flex items-center justify-center mx-auto">
-                  <Mic className="h-6 w-6 text-orange-600" />
-                </div>
-                <h3 className="font-semibold text-lg">Dictée vocale</h3>
-                <p className="text-zinc-500 text-sm">
-                  Dictez vos devis naturellement, l&apos;IA structure tout pour
-                  vous.
-                </p>
-              </div>
-              <div className="text-center space-y-3">
-                <div className="w-12 h-12 rounded-lg bg-orange-100 flex items-center justify-center mx-auto">
-                  <Zap className="h-6 w-6 text-orange-600" />
-                </div>
-                <h3 className="font-semibold text-lg">Ultra rapide</h3>
-                <p className="text-zinc-500 text-sm">
-                  Créez un devis complet en moins de 2 minutes, même sur le
-                  chantier.
-                </p>
-              </div>
-              <div className="text-center space-y-3">
-                <div className="w-12 h-12 rounded-lg bg-orange-100 flex items-center justify-center mx-auto">
-                  <FileText className="h-6 w-6 text-orange-600" />
-                </div>
-                <h3 className="font-semibold text-lg">PDF professionnel</h3>
-                <p className="text-zinc-500 text-sm">
-                  Exportez et envoyez des documents conformes aux normes
-                  françaises.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
+              <motion.p
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.2 }}
+                className="text-lg lg:text-xl text-zinc-600 max-w-2xl mx-auto"
+              >
+                Dictez vos devis et factures. Notre IA fait le reste : mise en
+                page pro, calculs TVA, PDF prêt à envoyer.
+              </motion.p>
 
-        {/* CTA */}
-        <section className="py-12 lg:py-24 px-4">
-          <div className="max-w-2xl mx-auto text-center space-y-6">
-            <h2 className="text-2xl lg:text-3xl font-bold">
-              Prêt à gagner du temps ?
-            </h2>
-            <p className="text-zinc-500">
-              14 jours d&apos;essai gratuit. Aucune carte bancaire requise.
-            </p>
-            <Link
-              href="/register"
-              className="h-10 px-6 inline-flex items-center justify-center text-sm font-medium bg-orange-500 hover:bg-orange-600 text-white rounded-md transition-colors"
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.3 }}
+                className="flex justify-center"
+              >
+                <Link
+                  href="/register"
+                  className="group relative inline-flex items-center justify-center h-14 px-10 text-lg font-semibold text-white bg-gradient-to-r from-primary to-orange-500 rounded-xl shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/40 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 overflow-hidden"
+                >
+                  <span className="relative z-10 flex items-center gap-2">
+                    Tester gratuitement maintenant
+                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                  </span>
+                  <div className="absolute inset-0 bg-gradient-to-r from-orange-500 to-primary opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                </Link>
+              </motion.div>
+            </div>
+
+            {/* App Mockup - Chat + Document Preview */}
+            <motion.div
+              initial={{ opacity: 0, y: 40 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7, delay: 0.4 }}
+              className="relative"
             >
-              Créer mon compte gratuit
-            </Link>
+              <div className="relative rounded-2xl border border-zinc-200 bg-white shadow-2xl shadow-zinc-300/50 overflow-hidden">
+                <BorderBeam size={400} duration={12} />
+
+                {/* Browser Header */}
+                <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-100 bg-zinc-50/80">
+                  <div className="flex gap-1.5">
+                    <div className="w-3 h-3 rounded-full bg-red-400" />
+                    <div className="w-3 h-3 rounded-full bg-yellow-400" />
+                    <div className="w-3 h-3 rounded-full bg-green-400" />
+                  </div>
+                  <div className="flex-1 flex justify-center">
+                    <div className="flex items-center gap-2 px-4 py-1 bg-zinc-100 rounded-md">
+                      <div className="w-3 h-3 rounded-full bg-green-500" />
+                      <span className="text-xs text-zinc-500">
+                        buildify.app/edition
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <HeroDemo />
+              </div>
+
+              {/* Decorative elements */}
+              <div className="absolute -z-10 -top-20 -right-20 w-96 h-96 bg-orange-100 rounded-full blur-3xl opacity-60" />
+              <div className="absolute -z-10 -bottom-20 -left-20 w-96 h-96 bg-blue-100 rounded-full blur-3xl opacity-40" />
+            </motion.div>
           </div>
+        </section>
+
+        {/* Features Section - Modern Bento Grid */}
+        <section
+          id="fonctionnalites"
+          className="py-16 lg:py-24 px-4 bg-zinc-50 overflow-hidden"
+        >
+          <div className="max-w-6xl mx-auto">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5 }}
+              className="text-center mb-16"
+            >
+              <h2 className="text-3xl lg:text-4xl font-bold tracking-tight mb-4">
+                Tout ce qu&apos;il vous faut pour facturer sereinement
+              </h2>
+              <p className="text-lg text-zinc-600 max-w-2xl mx-auto">
+                Chaque fonctionnalité répond à un vrai problème du quotidien.
+              </p>
+            </motion.div>
+
+            {/* Bento Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 lg:gap-6">
+              {/* Dictée Vocale - Large Card */}
+              <motion.div
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.6 }}
+                whileHover={{ scale: 1.01 }}
+                className="feature-card md:col-span-7 group relative bg-card rounded-2xl border border-orange-200/60 p-6 lg:p-8 overflow-hidden min-h-[340px] shadow-[0_1px_3px_0_rgb(0_0_0_/_0.04),_0_4px_12px_-2px_rgb(0_0_0_/_0.06)]"
+              >
+                <div className="feature-card-inner relative z-10 h-full flex flex-col">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="max-w-[65%]">
+                      <div className="inline-flex items-center gap-2 px-3 py-1 bg-orange-100 rounded-full mb-4">
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
+                        </span>
+                        <span className="text-xs font-medium text-orange-700">
+                          IA Active
+                        </span>
+                      </div>
+                      <h3 className="text-2xl font-bold mb-2 text-zinc-900">
+                        Dictée vocale IA
+                      </h3>
+                      <p className="text-zinc-600">
+                        Parlez naturellement, notre IA transcrit et structure
+                        automatiquement vos devis et factures.
+                      </p>
+                    </div>
+
+                    {/* Floating Mic Icon */}
+                    <motion.div
+                      animate={{ y: [0, -8, 0] }}
+                      transition={{
+                        duration: 3,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                      }}
+                    >
+                      <div className="relative">
+                        <div className="absolute inset-0 bg-orange-400 rounded-2xl blur-xl opacity-30 animate-pulse-ring" />
+                        <div className="relative w-14 h-14 lg:w-16 lg:h-16 bg-gradient-to-br from-orange-500 to-amber-500 rounded-2xl flex items-center justify-center shadow-lg shadow-orange-500/30">
+                          <Mic className="w-7 h-7 lg:w-8 lg:h-8 text-white" />
+                        </div>
+                      </div>
+                    </motion.div>
+                  </div>
+
+                  {/* Text Bubble - In flow, not absolute */}
+                  <motion.div
+                    initial={{ opacity: 0, x: -20 }}
+                    whileInView={{ opacity: 1, x: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: 0.3 }}
+                    className="mt-auto mb-16"
+                  >
+                    <div className="inline-block px-4 py-2.5 bg-white/90 backdrop-blur rounded-xl rounded-bl-none shadow-sm border border-orange-200/60 text-sm text-zinc-700">
+                      &ldquo;Crée un devis pour M. Dupont, rénovation salle de
+                      bain...&rdquo;
+                    </div>
+                  </motion.div>
+
+                  {/* Animated Sound Waves */}
+                  <div className="absolute bottom-6 right-6 flex items-end gap-1.5">
+                    {[32, 44, 28, 48, 36, 40, 30].map((height, i) => (
+                      <motion.div
+                        key={i}
+                        className="w-2 bg-gradient-to-t from-orange-500 to-amber-400 rounded-full"
+                        animate={{
+                          height: [12, height, 12],
+                        }}
+                        transition={{
+                          duration: 0.8,
+                          repeat: Infinity,
+                          delay: i * 0.1,
+                          ease: "easeInOut",
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {/* Decorative gradient */}
+                <div className="absolute -bottom-20 -right-20 w-64 h-64 bg-gradient-to-br from-orange-400 to-orange-300 rounded-full blur-3xl opacity-40" />
+              </motion.div>
+
+              {/* PDF Automatique - Medium Card */}
+              <motion.div
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.6, delay: 0.1 }}
+                whileHover={{ scale: 1.01 }}
+                className="feature-card md:col-span-5 group relative bg-card rounded-2xl border border-orange-200/60 p-6 lg:p-8 overflow-hidden min-h-[320px] shadow-[0_1px_3px_0_rgb(0_0_0_/_0.04),_0_4px_12px_-2px_rgb(0_0_0_/_0.06)]"
+              >
+                <div className="feature-card-inner relative z-10">
+                  <h3 className="text-2xl font-bold mb-2 text-zinc-900">
+                    PDF automatiques
+                  </h3>
+                  <p className="text-zinc-600 mb-6">
+                    Documents professionnels générés en un clic.
+                  </p>
+
+                  {/* Stacked Documents Animation */}
+                  <div className="relative h-40 mt-4">
+                    {[2, 1, 0].map((i) => (
+                      <motion.div
+                        key={i}
+                        className="absolute left-1/2 -translate-x-1/2"
+                        initial={{ y: 40, opacity: 0, rotate: -5 + i * 5 }}
+                        whileInView={{
+                          y: i * -8,
+                          opacity: 1,
+                          rotate: -5 + i * 5,
+                          x: "-50%",
+                        }}
+                        viewport={{ once: true }}
+                        transition={{ delay: 0.2 + i * 0.15, duration: 0.5 }}
+                        whileHover={{ y: i * -12 }}
+                        style={{ zIndex: 3 - i }}
+                      >
+                        <div
+                          className={`w-28 h-36 bg-white rounded-lg shadow-lg border border-orange-200/60 p-3 ${i === 0 ? "shadow-xl" : ""}`}
+                        >
+                          <div className="w-full h-2 bg-orange-200 rounded mb-2" />
+                          <div className="w-3/4 h-2 bg-orange-100 rounded mb-3" />
+                          <div className="space-y-1.5">
+                            <div className="w-full h-1.5 bg-zinc-100 rounded" />
+                            <div className="w-full h-1.5 bg-zinc-100 rounded" />
+                            <div className="w-2/3 h-1.5 bg-zinc-100 rounded" />
+                          </div>
+                          {i === 0 && (
+                            <motion.div
+                              initial={{ scale: 0 }}
+                              whileInView={{ scale: 1 }}
+                              viewport={{ once: true }}
+                              transition={{ delay: 0.8, type: "spring" }}
+                              className="absolute -top-2 -right-2 w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center"
+                            >
+                              <Check className="w-4 h-4 text-white" />
+                            </motion.div>
+                          )}
+                        </div>
+                        {/* Shimmer effect on top document */}
+                        {i === 0 && (
+                          <div className="absolute inset-0 overflow-hidden rounded-lg">
+                            <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-orange-200/70 to-transparent" />
+                          </div>
+                        )}
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="absolute -bottom-16 -right-16 w-48 h-48 bg-gradient-to-br from-orange-400 to-orange-300 rounded-full blur-3xl opacity-40" />
+              </motion.div>
+
+              {/* Calcul TVA - Small Card */}
+              <motion.div
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.6, delay: 0.2 }}
+                whileHover={{ scale: 1.01 }}
+                className="feature-card md:col-span-4 group relative bg-card rounded-2xl border border-orange-200/60 p-6 lg:p-8 overflow-hidden min-h-[280px] shadow-[0_1px_3px_0_rgb(0_0_0_/_0.04),_0_4px_12px_-2px_rgb(0_0_0_/_0.06)]"
+              >
+                <div className="feature-card-inner relative z-10">
+                  <h3 className="text-xl font-bold mb-2 text-zinc-900">
+                    Calcul TVA BTP
+                  </h3>
+                  <p className="text-zinc-600 text-sm mb-4">
+                    Gestion automatique des taux 5.5%, 10% et 20%.
+                  </p>
+
+                  {/* Animated Calculator Display */}
+                  <div className="bg-white/80 backdrop-blur rounded-xl p-4 border border-orange-200/60 shadow-sm">
+                    <div className="flex justify-between items-center mb-3">
+                      <span className="text-xs text-zinc-500">Total TTC</span>
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        whileInView={{ opacity: 1 }}
+                        viewport={{ once: true }}
+                        className="flex items-baseline gap-1"
+                      >
+                        <motion.span
+                          className="text-2xl font-bold text-orange-600"
+                          initial={{ scale: 0.5, opacity: 0 }}
+                          whileInView={{ scale: 1, opacity: 1 }}
+                          viewport={{ once: true }}
+                          transition={{ delay: 0.4, type: "spring" }}
+                        >
+                          4 455
+                        </motion.span>
+                        <span className="text-sm text-orange-600">€</span>
+                      </motion.div>
+                    </div>
+
+                    {/* TVA Badges */}
+                    <div className="flex gap-2 flex-wrap">
+                      {["5.5%", "10%", "20%"].map((rate, i) => (
+                        <motion.span
+                          key={rate}
+                          initial={{ y: 10, opacity: 0 }}
+                          whileInView={{ y: 0, opacity: 1 }}
+                          viewport={{ once: true }}
+                          transition={{ delay: 0.5 + i * 0.1 }}
+                          className={`px-2 py-1 rounded-md text-xs font-medium ${
+                            i === 1
+                              ? "bg-orange-100 text-orange-700"
+                              : "bg-zinc-100 text-zinc-500"
+                          }`}
+                        >
+                          TVA {rate}
+                        </motion.span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="absolute -bottom-12 -left-12 w-40 h-40 bg-gradient-to-br from-orange-400 to-orange-300 rounded-full blur-3xl opacity-40" />
+              </motion.div>
+
+              {/* Signature - Large Card */}
+              <motion.div
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.6, delay: 0.3 }}
+                whileHover={{ scale: 1.01 }}
+                className="feature-card md:col-span-8 group relative bg-card rounded-2xl border border-orange-200/60 p-6 lg:p-8 overflow-hidden min-h-[280px] shadow-[0_1px_3px_0_rgb(0_0_0_/_0.04),_0_4px_12px_-2px_rgb(0_0_0_/_0.06)]"
+              >
+                <div className="feature-card-inner relative z-10 flex flex-col md:flex-row gap-6">
+                  <div className="flex-1">
+                    <div className="inline-flex items-center gap-2 px-3 py-1 bg-orange-100 rounded-full mb-4">
+                      <Check className="w-3 h-3 text-orange-600" />
+                      <span className="text-xs font-medium text-orange-700">
+                        Validé sur place
+                      </span>
+                    </div>
+                    <h3 className="text-2xl font-bold mb-2 text-zinc-900">
+                      Signature sur chantier
+                    </h3>
+                    <p className="text-zinc-600">
+                      Vos clients signent directement sur votre téléphone. Le
+                      devis est validé avant même de quitter le chantier.
+                    </p>
+                  </div>
+
+                  {/* Phone Mockup with Signature */}
+                  <div className="relative flex-shrink-0">
+                    <motion.div
+                      className="relative w-32 h-56 bg-zinc-900 rounded-3xl p-1.5 shadow-2xl"
+                      animate={{ y: [0, -5, 0] }}
+                      transition={{
+                        duration: 4,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                      }}
+                    >
+                      <div className="w-full h-full bg-white rounded-2xl overflow-hidden">
+                        {/* Phone content */}
+                        <div className="p-3">
+                          <div className="text-[8px] text-zinc-400 mb-1">
+                            Signature client
+                          </div>
+                          <div className="h-20 bg-zinc-50 rounded-lg border border-dashed border-orange-300 flex items-center justify-center relative overflow-hidden">
+                            {/* Animated Signature */}
+                            <svg
+                              viewBox="0 0 100 40"
+                              className="w-full h-full p-2"
+                            >
+                              <motion.path
+                                d="M10,30 Q20,10 30,25 T50,20 Q60,15 70,25 T90,20"
+                                fill="none"
+                                stroke="#ea580c"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                initial={{ pathLength: 0 }}
+                                whileInView={{ pathLength: 1 }}
+                                viewport={{ once: true }}
+                                transition={{
+                                  duration: 1.5,
+                                  delay: 0.5,
+                                  ease: "easeInOut",
+                                }}
+                              />
+                            </svg>
+                          </div>
+                          <motion.button
+                            initial={{ opacity: 0 }}
+                            whileInView={{ opacity: 1 }}
+                            viewport={{ once: true }}
+                            transition={{ delay: 2 }}
+                            className="w-full mt-2 py-1.5 bg-orange-500 text-white text-[9px] font-medium rounded-lg"
+                          >
+                            Valider
+                          </motion.button>
+                        </div>
+                      </div>
+                      {/* Phone notch */}
+                      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-12 h-4 bg-zinc-900 rounded-b-xl" />
+                    </motion.div>
+
+                    {/* Finger tap indicator */}
+                    <motion.div
+                      className="absolute -bottom-2 right-4"
+                      animate={{ scale: [1, 1.1, 1], opacity: [0.5, 1, 0.5] }}
+                      transition={{ duration: 2, repeat: Infinity }}
+                    >
+                      <div className="w-8 h-8 bg-orange-400/30 rounded-full flex items-center justify-center">
+                        <div className="w-4 h-4 bg-orange-500/50 rounded-full" />
+                      </div>
+                    </motion.div>
+                  </div>
+                </div>
+
+                <div className="absolute -bottom-16 -right-16 w-56 h-56 bg-gradient-to-br from-orange-400 to-orange-300 rounded-full blur-3xl opacity-40" />
+              </motion.div>
+            </div>
+          </div>
+        </section>
+
+        {/* Max AI Assistant Section */}
+        <section className="py-16 lg:py-24 px-4 relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-b from-zinc-50 via-orange-50/40 to-white" />
+          <div className="max-w-6xl mx-auto relative">
+            {/* Mobile: Title first */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5 }}
+              className="text-center mb-8 lg:hidden"
+            >
+              <Badge
+                variant="secondary"
+                className="mb-4 bg-orange-100 text-orange-700 border-orange-200"
+              >
+                Assistant IA
+              </Badge>
+              <h2 className="text-3xl font-bold tracking-tight">
+                Rencontrez <span className="text-primary">Max</span>
+              </h2>
+            </motion.div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-16 items-center">
+              {/* Max Image */}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                whileInView={{ opacity: 1, scale: 1 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.6 }}
+                className="relative flex justify-center lg:justify-start"
+              >
+                <div className="relative">
+                  {/* Glow effect */}
+                  <div className="absolute inset-0 bg-gradient-to-br from-orange-400 to-amber-300 rounded-full blur-3xl opacity-30 scale-110" />
+
+                  {/* Main image container */}
+                  <motion.div
+                    animate={{ y: [0, -10, 0] }}
+                    transition={{
+                      duration: 4,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                    }}
+                    className="relative"
+                  >
+                    <div className="relative w-64 h-64 lg:w-80 lg:h-80">
+                      <Image
+                        src={MAX_AVATAR_URL}
+                        alt="Max - Assistant IA Buildify"
+                        fill
+                        className="object-cover rounded-3xl shadow-2xl shadow-orange-500/20"
+                        unoptimized
+                      />
+
+                      {/* Online indicator */}
+                      <div className="absolute -bottom-2 -right-2 lg:-bottom-3 lg:-right-3 bg-white rounded-full p-2 shadow-lg">
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 rounded-full">
+                          <span className="relative flex h-2.5 w-2.5">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span>
+                          </span>
+                          <span className="text-xs font-medium text-green-700">
+                            En ligne
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+
+                  {/* Decorative elements */}
+                  <motion.div
+                    initial={{ opacity: 0, x: -20 }}
+                    whileInView={{ opacity: 1, x: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: 0.4 }}
+                    className="absolute -left-4 top-1/4 bg-white rounded-xl p-3 shadow-lg border border-orange-100 hidden lg:block"
+                  >
+                    <Sparkles className="w-5 h-5 text-orange-500" />
+                  </motion.div>
+
+                  <motion.div
+                    initial={{ opacity: 0, x: 20 }}
+                    whileInView={{ opacity: 1, x: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: 0.5 }}
+                    className="absolute -right-4 bottom-1/4 bg-white rounded-xl p-3 shadow-lg border border-orange-100 hidden lg:block"
+                  >
+                    <FileCheck className="w-5 h-5 text-orange-500" />
+                  </motion.div>
+                </div>
+              </motion.div>
+
+              {/* Content */}
+              <motion.div
+                initial={{ opacity: 0, x: 30 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.6, delay: 0.2 }}
+                className="text-center lg:text-left"
+              >
+                {/* Desktop: Title here */}
+                <div className="hidden lg:block">
+                  <Badge
+                    variant="secondary"
+                    className="mb-4 bg-orange-100 text-orange-700 border-orange-200"
+                  >
+                    Assistant IA
+                  </Badge>
+                  <h2 className="text-4xl xl:text-5xl font-bold tracking-tight mb-4">
+                    Rencontrez <span className="text-primary">Max</span>
+                  </h2>
+                </div>
+
+                <p className="text-lg lg:text-xl text-zinc-600 mb-8">
+                  Votre assistant personnel qui transforme vos paroles en
+                  documents professionnels. Disponible 24h/24, Max ne dort
+                  jamais et ne fait pas d&apos;erreurs de calcul.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+                  {[
+                    { icon: Mic, text: "Comprend votre voix" },
+                    {
+                      icon: FileCheck,
+                      text: "Crée vos devis et factures en 30 secondes",
+                    },
+                    { icon: Shield, text: "Calcule la TVA automatiquement" },
+                    { icon: Sparkles, text: "Apprend vos préférences" },
+                  ].map((item, index) => (
+                    <motion.div
+                      key={index}
+                      initial={{ opacity: 0, y: 10 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ delay: 0.3 + index * 0.1 }}
+                      className="flex items-center gap-3 p-3 bg-white rounded-xl border border-orange-100 shadow-sm"
+                    >
+                      <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <item.icon className="w-5 h-5 text-orange-600" />
+                      </div>
+                      <span className="text-sm font-medium text-zinc-700">
+                        {item.text}
+                      </span>
+                    </motion.div>
+                  ))}
+                </div>
+
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: 0.7 }}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-orange-50 rounded-full text-sm text-orange-700"
+                >
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
+                  </span>
+                  Plus de 1 000 devis créés ce mois
+                </motion.div>
+              </motion.div>
+            </div>
+          </div>
+        </section>
+
+        {/* Pricing Section */}
+        <section id="tarifs" className="py-16 lg:py-24 px-4">
+          <div className="max-w-5xl mx-auto">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5 }}
+              className="text-center mb-16"
+            >
+              <h2 className="text-3xl lg:text-4xl font-bold tracking-tight mb-4">
+                Des prix simples, sans surprise
+              </h2>
+              <p className="text-lg text-zinc-600 max-w-2xl mx-auto">
+                Pas d&apos;engagement, pas de frais cachés. Annulez quand vous
+                voulez.
+              </p>
+            </motion.div>
+
+            <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+              {pricingPlans.map((plan, index) => (
+                <motion.div
+                  key={plan.name}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.5, delay: index * 0.1 }}
+                  className={`relative rounded-2xl border p-8 ${
+                    plan.popular
+                      ? "border-primary bg-primary/5 shadow-xl shadow-primary/10"
+                      : "border-zinc-200 bg-white"
+                  }`}
+                >
+                  {plan.popular && (
+                    <Badge className="absolute -top-3 left-1/2 -translate-x-1/2">
+                      Le plus populaire
+                    </Badge>
+                  )}
+
+                  <div className="text-center mb-8">
+                    <h3 className="text-xl font-bold mb-2">{plan.name}</h3>
+                    <p className="text-zinc-600 text-sm mb-4">
+                      {plan.description}
+                    </p>
+                    <div className="flex items-baseline justify-center gap-1">
+                      <span className="text-4xl font-bold">{plan.price}€</span>
+                      <span className="text-zinc-500">/mois</span>
+                    </div>
+                  </div>
+
+                  <ul className="space-y-3 mb-8">
+                    {plan.features.map((feature) => (
+                      <li key={feature} className="flex items-center gap-3">
+                        <Check className="w-5 h-5 text-primary flex-shrink-0" />
+                        <span className="text-sm text-zinc-700">{feature}</span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  <Button
+                    className="w-full"
+                    variant={plan.popular ? "default" : "outline"}
+                    asChild
+                  >
+                    <Link href="/register">{plan.cta}</Link>
+                  </Button>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Testimonials Section */}
+        <section className="py-16 lg:py-24 px-4 bg-zinc-50">
+          <div className="max-w-6xl mx-auto">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5 }}
+              className="text-center mb-16"
+            >
+              <h2 className="text-3xl lg:text-4xl font-bold tracking-tight mb-4">
+                Ils ont adopté Buildify
+              </h2>
+              <p className="text-lg text-zinc-600 max-w-2xl mx-auto">
+                Découvrez ce que les artisans pensent de notre solution.
+              </p>
+            </motion.div>
+
+            <div className="grid md:grid-cols-3 gap-6 lg:gap-8">
+              {testimonials.map((testimonial, index) => (
+                <motion.div
+                  key={testimonial.name}
+                  initial={{ opacity: 0, y: 30 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.5, delay: index * 0.1 }}
+                  className="relative bg-white rounded-2xl border border-zinc-200 p-6 lg:p-8 shadow-sm hover:shadow-md transition-shadow"
+                >
+                  <Quote className="absolute top-6 right-6 w-8 h-8 text-orange-100" />
+
+                  <div className="flex gap-1 mb-4">
+                    {[...Array(5)].map((_, i) => (
+                      <Star
+                        key={i}
+                        className="w-4 h-4 fill-orange-400 text-orange-400"
+                      />
+                    ))}
+                  </div>
+
+                  <p className="text-zinc-700 mb-6 relative z-10 leading-relaxed">
+                    &ldquo;{testimonial.content}&rdquo;
+                  </p>
+
+                  <div className="flex items-center gap-4">
+                    <Image
+                      src={testimonial.avatar}
+                      alt={testimonial.name}
+                      width={48}
+                      height={48}
+                      className="rounded-full object-cover"
+                      unoptimized
+                    />
+                    <div>
+                      <p className="font-semibold text-zinc-900">
+                        {testimonial.name}
+                      </p>
+                      <p className="text-sm text-zinc-500">
+                        {testimonial.role} • {testimonial.location}
+                      </p>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* FAQ Section */}
+        <section id="faq" className="py-16 lg:py-24 px-4">
+          <div className="max-w-3xl mx-auto">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5 }}
+              className="text-center mb-12"
+            >
+              <h2 className="text-3xl lg:text-4xl font-bold tracking-tight mb-4">
+                Questions fréquentes
+              </h2>
+              <p className="text-lg text-zinc-600">
+                Tout ce que vous devez savoir avant de commencer.
+              </p>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5, delay: 0.1 }}
+            >
+              <Accordion type="single" collapsible className="space-y-4">
+                {faqItems.map((item, index) => (
+                  <AccordionItem
+                    key={index}
+                    value={`item-${index}`}
+                    className="bg-white rounded-xl border border-zinc-200 px-6 data-[state=open]:shadow-lg transition-shadow"
+                  >
+                    <AccordionTrigger className="text-left hover:no-underline py-5">
+                      <div className="flex items-center gap-3">
+                        {index === 0 && (
+                          <Shield className="w-5 h-5 text-primary flex-shrink-0" />
+                        )}
+                        {index === 1 && (
+                          <FileCheck className="w-5 h-5 text-primary flex-shrink-0" />
+                        )}
+                        {index === 2 && (
+                          <Sparkles className="w-5 h-5 text-primary flex-shrink-0" />
+                        )}
+                        {index === 3 && (
+                          <Check className="w-5 h-5 text-primary flex-shrink-0" />
+                        )}
+                        <span className="font-medium">{item.question}</span>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="text-zinc-600 pb-5">
+                      {item.answer}
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
+            </motion.div>
+          </div>
+        </section>
+
+        {/* Final CTA Section */}
+        <section className="py-16 lg:py-24 px-4">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5 }}
+            className="max-w-4xl mx-auto text-center"
+          >
+            <h2 className="text-3xl lg:text-4xl font-bold tracking-tight mb-4">
+              Prêt à gagner 1 heure par jour ?
+            </h2>
+            <p className="text-lg text-zinc-600 mb-8 max-w-2xl mx-auto">
+              Rejoignez les artisans qui ont déjà simplifié leur facturation. 14
+              jours d&apos;essai gratuit, sans engagement.
+            </p>
+            <Button size="lg" className="text-base h-12 px-8" asChild>
+              <Link href="/register">
+                Créer mon compte gratuitement
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </Link>
+            </Button>
+          </motion.div>
         </section>
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-zinc-200 py-6 px-4">
-        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
-          <p className="text-sm text-zinc-500">
-            &copy; {new Date().getFullYear()} Buildify. Tous droits réservés.
-          </p>
-          <div className="flex gap-4 text-sm text-zinc-500">
-            <Link href="#" className="hover:underline">
-              Mentions légales
-            </Link>
-            <Link href="#" className="hover:underline">
-              Confidentialité
-            </Link>
+      <footer className="border-t border-zinc-200 bg-zinc-50">
+        <div className="max-w-6xl mx-auto px-4 py-12 lg:py-16">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-12">
+            {/* Brand */}
+            <div className="col-span-2 md:col-span-1">
+              <Link
+                href="/"
+                className="flex items-center gap-2 font-bold text-xl mb-4"
+              >
+                <Image
+                  src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/buildify-assets/Logo/icon (1).svg`}
+                  alt="Buildify"
+                  width={28}
+                  height={28}
+                  className="flex-shrink-0"
+                  unoptimized
+                />
+                Buildify
+              </Link>
+              <p className="text-sm text-zinc-500 mb-4">
+                La facturation vocale pour les artisans du BTP.
+              </p>
+              <div className="flex gap-3">
+                <Link
+                  href="#"
+                  className="w-9 h-9 rounded-lg bg-zinc-100 hover:bg-zinc-200 flex items-center justify-center transition-colors"
+                >
+                  <Twitter className="w-4 h-4 text-zinc-600" />
+                </Link>
+                <Link
+                  href="#"
+                  className="w-9 h-9 rounded-lg bg-zinc-100 hover:bg-zinc-200 flex items-center justify-center transition-colors"
+                >
+                  <Linkedin className="w-4 h-4 text-zinc-600" />
+                </Link>
+              </div>
+            </div>
+
+            {/* Produit */}
+            <div>
+              <h4 className="font-semibold mb-4">Produit</h4>
+              <ul className="space-y-3 text-sm text-zinc-600">
+                <li>
+                  <Link href="#fonctionnalites" className="hover:text-zinc-900">
+                    Fonctionnalités
+                  </Link>
+                </li>
+                <li>
+                  <Link href="#tarifs" className="hover:text-zinc-900">
+                    Tarifs
+                  </Link>
+                </li>
+                <li>
+                  <Link href="#faq" className="hover:text-zinc-900">
+                    FAQ
+                  </Link>
+                </li>
+              </ul>
+            </div>
+
+            {/* Légal */}
+            <div>
+              <h4 className="font-semibold mb-4">Légal</h4>
+              <ul className="space-y-3 text-sm text-zinc-600">
+                <li>
+                  <Link href="/cgv" className="hover:text-zinc-900">
+                    Conditions générales
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/mentions-legales"
+                    className="hover:text-zinc-900"
+                  >
+                    Mentions légales
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/confidentialite" className="hover:text-zinc-900">
+                    Confidentialité
+                  </Link>
+                </li>
+              </ul>
+            </div>
+
+            {/* Contact */}
+            <div>
+              <h4 className="font-semibold mb-4">Contact</h4>
+              <ul className="space-y-3 text-sm text-zinc-600">
+                <li>
+                  <Link
+                    href="mailto:contact@buildify.app"
+                    className="hover:text-zinc-900"
+                  >
+                    contact@buildify.app
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/login" className="hover:text-zinc-900">
+                    Connexion
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/register" className="hover:text-zinc-900">
+                    Créer un compte
+                  </Link>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          {/* Bottom */}
+          <div className="pt-8 border-t border-zinc-200 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <p className="text-sm text-zinc-500">
+              © {new Date().getFullYear()} Buildify. Tous droits réservés.
+            </p>
+            <p className="text-sm text-zinc-500">Fait avec passion en France</p>
           </div>
         </div>
       </footer>

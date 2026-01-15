@@ -232,6 +232,12 @@ const styles = StyleSheet.create({
     width: 120,
     marginLeft: "auto",
   },
+  signatureImage: {
+    width: 120,
+    height: 50,
+    marginLeft: "auto",
+    objectFit: "contain" as const,
+  },
   legalNotice: {
     textAlign: "center",
     fontSize: 8,
@@ -292,14 +298,20 @@ interface QuoteData {
   deposit: number;
   totalTTC: number;
   paymentConditions: string;
+  signature?: string;
 }
 
 interface QuotePDFTemplateProps {
   data: QuoteData;
   accentColor?: string | null;
+  signature?: string;
 }
 
-export function QuotePDFTemplate({ data, accentColor }: QuotePDFTemplateProps) {
+export function QuotePDFTemplate({
+  data,
+  accentColor,
+  signature,
+}: QuotePDFTemplateProps) {
   const hasCustomColor = accentColor !== null && accentColor !== undefined;
   const bgColor = hasCustomColor ? accentColor : "#f5f5f5";
   const textColor = hasCustomColor ? getContrastColor(accentColor) : "#666666";
@@ -499,7 +511,12 @@ export function QuotePDFTemplate({ data, accentColor }: QuotePDFTemplateProps) {
               <Text style={styles.signatureText}>Lu et approuvé</Text>
               <Text style={styles.signatureTextMuted}>Le : {data.date}</Text>
               <Text style={styles.signatureTextMuted}>Signature :</Text>
-              <View style={styles.signatureLine} />
+              {signature ? (
+                // eslint-disable-next-line jsx-a11y/alt-text
+                <Image src={signature} style={styles.signatureImage} />
+              ) : (
+                <View style={styles.signatureLine} />
+              )}
             </View>
           </View>
           <Text style={styles.legalNotice}>

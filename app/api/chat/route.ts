@@ -65,6 +65,8 @@ export async function POST(req: NextRequest) {
     let newClient: Client | undefined = undefined;
     let validityUpdate: { validity: string; validUntil: string } | undefined;
     let dueDateUpdate: { dueDate: string; dueDateDb: string } | undefined;
+    let downloadPdf = false;
+    let convertToInvoice = false;
     let iterations = 0;
 
     while (iterations < MAX_TOOL_ITERATIONS) {
@@ -92,6 +94,8 @@ export async function POST(req: NextRequest) {
           newClient,
           validityUpdate,
           dueDateUpdate,
+          downloadPdf,
+          convertToInvoice,
         });
       }
 
@@ -136,6 +140,12 @@ export async function POST(req: NextRequest) {
         if (result.dueDateUpdate) {
           dueDateUpdate = result.dueDateUpdate;
         }
+        if (result.downloadPdf) {
+          downloadPdf = true;
+        }
+        if (result.convertToInvoice) {
+          convertToInvoice = true;
+        }
 
         openaiMessages.push({
           role: "tool",
@@ -156,6 +166,8 @@ export async function POST(req: NextRequest) {
       newClient,
       validityUpdate,
       dueDateUpdate,
+      downloadPdf,
+      convertToInvoice,
     });
   } catch (error) {
     console.error("Chat API error:", error);
