@@ -75,6 +75,50 @@ export async function updateProfile(
   return { success: true };
 }
 
+// ============ THEME ============
+
+export async function getUserTheme(): Promise<"light" | "dark"> {
+  const supabase = await createClient();
+  const user = await getCurrentUser();
+
+  if (!user) return "light";
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("theme")
+    .eq("id", user.id)
+    .single();
+
+  if (error || !data?.theme) {
+    return "light";
+  }
+
+  return data.theme as "light" | "dark";
+}
+
+export async function updateUserTheme(
+  theme: "light" | "dark",
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+  const user = await getCurrentUser();
+
+  if (!user) {
+    return { success: false, error: "Non authentifié" };
+  }
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ theme })
+    .eq("id", user.id);
+
+  if (error) {
+    console.error("Error updating theme:", error);
+    return { success: false, error: error.message };
+  }
+
+  return { success: true };
+}
+
 export async function getCompany(): Promise<Company | null> {
   const supabase = await createClient();
   const user = await getCurrentUser();

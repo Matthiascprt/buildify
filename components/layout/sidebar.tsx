@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   FileText,
@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
+import { useThemeSync } from "@/components/theme-provider";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -99,8 +100,8 @@ function AccountMenu({
   user?: { email?: string } | null;
   initials: string;
 }) {
-  const router = useRouter();
-  const { theme, setTheme } = useTheme();
+  const { theme } = useTheme();
+  const { syncTheme } = useThemeSync();
   const [mounted, setMounted] = React.useState(false);
 
   React.useEffect(() => {
@@ -110,9 +111,12 @@ function AccountMenu({
   const handleSignOut = React.useCallback(async () => {
     const supabase = createClient();
     await supabase.auth.signOut();
-    router.push("/login");
-    router.refresh();
-  }, [router]);
+    // Nettoyer le thème pour éviter les bugs d'affichage sur les pages publiques
+    localStorage.removeItem("buildify-theme");
+    document.documentElement.classList.remove("dark");
+    document.documentElement.classList.add("light");
+    window.location.href = "/login";
+  }, []);
 
   const themes = [
     { value: "light", label: "Clair", icon: Sun },
@@ -144,7 +148,7 @@ function AccountMenu({
           {themes.map(({ value, label, icon: Icon }) => (
             <button
               key={value}
-              onClick={() => setTheme(value)}
+              onClick={() => syncTheme(value as "light" | "dark")}
               className={cn(
                 "flex flex-1 flex-col items-center justify-center gap-2 rounded-md px-2.5 py-2.5 text-xs transition-colors min-w-0 w-0",
                 mounted && theme === value
@@ -321,8 +325,8 @@ function BottomNavLink({
 
 export function BottomNav({ user }: SidebarProps) {
   const pathname = usePathname();
-  const router = useRouter();
-  const { theme, setTheme } = useTheme();
+  const { theme } = useTheme();
+  const { syncTheme } = useThemeSync();
   const [mounted, setMounted] = React.useState(false);
   const initials = user?.email?.slice(0, 2).toUpperCase() || "U";
 
@@ -333,9 +337,12 @@ export function BottomNav({ user }: SidebarProps) {
   const handleSignOut = React.useCallback(async () => {
     const supabase = createClient();
     await supabase.auth.signOut();
-    router.push("/login");
-    router.refresh();
-  }, [router]);
+    // Nettoyer le thème pour éviter les bugs d'affichage sur les pages publiques
+    localStorage.removeItem("buildify-theme");
+    document.documentElement.classList.remove("dark");
+    document.documentElement.classList.add("light");
+    window.location.href = "/login";
+  }, []);
 
   const themes = [
     { value: "light", label: "Clair", icon: Sun },
@@ -372,7 +379,7 @@ export function BottomNav({ user }: SidebarProps) {
               {themes.map(({ value, label, icon: Icon }) => (
                 <button
                   key={value}
-                  onClick={() => setTheme(value)}
+                  onClick={() => syncTheme(value as "light" | "dark")}
                   className={cn(
                     "flex flex-1 flex-col items-center justify-center gap-2 rounded-md px-2.5 py-2.5 text-xs transition-colors min-w-0 w-0",
                     mounted && theme === value

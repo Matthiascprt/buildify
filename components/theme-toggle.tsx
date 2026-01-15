@@ -2,19 +2,20 @@
 
 import { useTheme } from "next-themes";
 import { useSyncExternalStore } from "react";
-import { Sun, Moon, Monitor } from "lucide-react";
+import { Sun, Moon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useThemeSync } from "@/components/theme-provider";
 
 const themes = [
   { value: "light", label: "Clair", icon: Sun },
   { value: "dark", label: "Sombre", icon: Moon },
-  { value: "system", label: "Système", icon: Monitor },
 ] as const;
 
 const emptySubscribe = () => () => {};
 
 export function ThemeToggle() {
-  const { theme, setTheme } = useTheme();
+  const { theme } = useTheme();
+  const { syncTheme } = useThemeSync();
   const mounted = useSyncExternalStore(
     emptySubscribe,
     () => true,
@@ -42,7 +43,7 @@ export function ThemeToggle() {
       {themes.map(({ value, label, icon: Icon }) => (
         <button
           key={value}
-          onClick={() => setTheme(value)}
+          onClick={() => syncTheme(value)}
           className={cn(
             "flex flex-1 flex-col items-center gap-2 rounded-lg border-2 p-4 transition-colors",
             theme === value

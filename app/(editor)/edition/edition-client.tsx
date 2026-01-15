@@ -72,6 +72,7 @@ export function EditionClient({
     // Force tutorial for testing via ?tutorial=1
     if (forceTutorial) {
       localStorage.removeItem("buildify_tutorial_completed");
+      sessionStorage.setItem("buildify_tutorial_active", "true");
       setShowTutorial(true);
       const url = new URL(window.location.href);
       url.searchParams.delete("tutorial");
@@ -83,10 +84,23 @@ export function EditionClient({
     // Clear any previous flag since setup means fresh start
     if (fromSetup) {
       localStorage.removeItem("buildify_tutorial_completed");
+      sessionStorage.setItem("buildify_tutorial_active", "true");
       setShowTutorial(true);
       const url = new URL(window.location.href);
       url.searchParams.delete("fromSetup");
       window.history.replaceState({}, "", url.toString());
+      return;
+    }
+
+    // Check if tutorial was active (handles browser back/forward navigation)
+    const tutorialActive =
+      sessionStorage.getItem("buildify_tutorial_active") === "true";
+    const tutorialCompleted =
+      localStorage.getItem("buildify_tutorial_completed") === "true";
+    if (tutorialActive && !tutorialCompleted) {
+      setShowTutorial(true);
+    } else {
+      setShowTutorial(false);
     }
   }, [searchParams]);
 
@@ -710,6 +724,7 @@ export function EditionClient({
         <OnboardingTutorial
           documentType={document?.type}
           onComplete={() => setShowTutorial(false)}
+          onSwitchView={setMobileView}
         />
       )}
       <div

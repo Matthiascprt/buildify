@@ -17,8 +17,17 @@ export default async function EditorLayout({
     redirect("/login");
   }
 
+  // Charger le thème depuis la DB
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("theme")
+    .eq("id", user.id)
+    .single();
+
+  const userTheme = (profile?.theme as "light" | "dark") || "light";
+
   return (
-    <ThemeProvider>
+    <ThemeProvider initialTheme={userTheme}>
       <div className="h-screen bg-sidebar overflow-hidden">
         <Sidebar user={user} />
         <BottomNav user={user} />

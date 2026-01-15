@@ -450,6 +450,7 @@ export function DocumentPreview({
                   className="2xl:hidden h-8 w-8 rounded-full bg-muted hover:bg-muted/80"
                   onClick={onSwitchToChat}
                   title="Voir la conversation"
+                  data-tour-id="tour-switch-chat-button"
                 >
                   <MessageSquare className="h-4 w-4 text-muted-foreground" />
                 </Button>

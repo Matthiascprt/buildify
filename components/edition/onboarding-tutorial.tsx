@@ -24,6 +24,8 @@ import {
 const MAX_AVATAR_URL =
   "https://ckvcijpgohqlnvoinwmc.supabase.co/storage/v1/object/public/buildify-assets/Logo/Agent%20IA.png";
 
+type TooltipPosition = "top" | "bottom" | "left" | "right";
+
 interface TutorialStep {
   id: string;
   title: string;
@@ -32,6 +34,10 @@ interface TutorialStep {
   tip?: string;
   targetId?: string;
   quoteOnly?: boolean;
+  preferredPosition?: TooltipPosition;
+  requiredView?: "chat" | "preview";
+  desktopOnly?: boolean;
+  mobileOnly?: boolean;
 }
 
 const tutorialSteps: TutorialStep[] = [
@@ -42,6 +48,7 @@ const tutorialSteps: TutorialStep[] = [
       "Je suis Max, votre assistant intelligent. Je vais vous guider à travers les fonctionnalités de l'éditeur.",
     icon: <Sparkles className="w-5 h-5" />,
     tip: "Conseil : Vous pouvez toujours me poser des questions !",
+    requiredView: "chat",
   },
   {
     id: "voice",
@@ -51,6 +58,8 @@ const tutorialSteps: TutorialStep[] = [
     icon: <Mic className="w-5 h-5" />,
     tip: 'Exemple : "Pose de carrelage 20m² à 45€/m²"',
     targetId: "tour-mic-button",
+    preferredPosition: "top",
+    requiredView: "chat",
   },
   {
     id: "chat",
@@ -60,6 +69,8 @@ const tutorialSteps: TutorialStep[] = [
     icon: <MessageSquare className="w-5 h-5" />,
     tip: 'Essayez : "Ajoute une ligne pour les matériaux"',
     targetId: "tour-chat-input",
+    preferredPosition: "top",
+    requiredView: "chat",
   },
   {
     id: "document",
@@ -69,6 +80,19 @@ const tutorialSteps: TutorialStep[] = [
     icon: <FileText className="w-5 h-5" />,
     tip: "Les modifications sont sauvegardées automatiquement",
     targetId: "tour-document-preview",
+    requiredView: "preview",
+    desktopOnly: true,
+  },
+  {
+    id: "switch-chat",
+    title: "Retour à la conversation",
+    description:
+      "Ce bouton vous permet de revenir à la conversation avec Max pour continuer à modifier votre document.",
+    icon: <MessageSquare className="w-5 h-5" />,
+    tip: "Basculez facilement entre le chat et l'aperçu",
+    targetId: "tour-switch-chat-button",
+    requiredView: "preview",
+    mobileOnly: true,
   },
   {
     id: "add-line",
@@ -78,6 +102,7 @@ const tutorialSteps: TutorialStep[] = [
     icon: <Plus className="w-5 h-5" />,
     tip: "Vous pouvez aussi demander à Max d'ajouter des lignes",
     targetId: "tour-add-line-button",
+    requiredView: "preview",
   },
   {
     id: "remove-line",
@@ -87,6 +112,7 @@ const tutorialSteps: TutorialStep[] = [
     icon: <Minus className="w-5 h-5" />,
     tip: "Cliquez sur les lignes à supprimer puis confirmez",
     targetId: "tour-remove-line-button",
+    requiredView: "preview",
   },
   {
     id: "download",
@@ -96,6 +122,7 @@ const tutorialSteps: TutorialStep[] = [
     icon: <Download className="w-5 h-5" />,
     tip: "Le PDF reprend votre logo et couleur d'accent",
     targetId: "tour-download-button",
+    requiredView: "preview",
   },
   {
     id: "customize",
@@ -105,6 +132,7 @@ const tutorialSteps: TutorialStep[] = [
     icon: <Palette className="w-5 h-5" />,
     tip: "Votre logo apparaît automatiquement",
     targetId: "tour-color-button",
+    requiredView: "preview",
   },
   {
     id: "clients",
@@ -114,6 +142,7 @@ const tutorialSteps: TutorialStep[] = [
     icon: <Users className="w-5 h-5" />,
     tip: "Retrouvez facilement tous les documents d'un client",
     targetId: "tour-client-button",
+    requiredView: "preview",
   },
   {
     id: "convert",
@@ -124,6 +153,7 @@ const tutorialSteps: TutorialStep[] = [
     tip: "La facture reprend toutes les informations du devis",
     targetId: "tour-convert-button",
     quoteOnly: true,
+    requiredView: "preview",
   },
   {
     id: "signature",
@@ -134,6 +164,7 @@ const tutorialSteps: TutorialStep[] = [
     tip: "Idéal pour une validation rapide sur tablette",
     targetId: "tour-signature-button",
     quoteOnly: true,
+    requiredView: "preview",
   },
   {
     id: "delete",
@@ -143,6 +174,7 @@ const tutorialSteps: TutorialStep[] = [
     icon: <Trash2 className="w-5 h-5" />,
     tip: "Une confirmation vous sera demandée",
     targetId: "tour-delete-button",
+    requiredView: "preview",
   },
 ];
 
@@ -153,19 +185,19 @@ interface TargetRect {
   height: number;
 }
 
-type TooltipPosition = "top" | "bottom" | "left" | "right";
-
 interface OnboardingTutorialProps {
   onComplete: () => void;
   documentType?: "quote" | "invoice";
+  onSwitchView?: (view: "chat" | "preview") => void;
 }
 
-const GAP = 12;
+const GAP = 16;
 const MARGIN = 12;
 
 export function OnboardingTutorial({
   onComplete,
   documentType = "quote",
+  onSwitchView,
 }: OnboardingTutorialProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const [isExiting, setIsExiting] = useState(false);
@@ -173,15 +205,18 @@ export function OnboardingTutorial({
   const [computedPosition, setComputedPosition] =
     useState<TooltipPosition | null>(null);
   const [tooltipWidth, setTooltipWidth] = useState(360);
+  const [isMobileView, setIsMobileView] = useState(false);
   const rafRef = useRef<number>(0);
 
   const filteredSteps = tutorialSteps.filter((s) => {
     if (s.quoteOnly && documentType === "invoice") return false;
+    if (s.desktopOnly && isMobileView) return false;
+    if (s.mobileOnly && !isMobileView) return false;
     return true;
   });
   const step = filteredSteps[currentStep];
   const isLastStep = currentStep === filteredSteps.length - 1;
-  const hasTarget = !!step?.targetId;
+  const hasTarget = !!step?.targetId && targetRect !== null;
 
   useEffect(() => {
     const handleResize = () => {
@@ -193,12 +228,19 @@ export function OnboardingTutorial({
       } else {
         setTooltipWidth(360);
       }
+      setIsMobileView(width < 1536);
     };
 
     handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+  useEffect(() => {
+    if (step?.requiredView && onSwitchView) {
+      onSwitchView(step.requiredView);
+    }
+  }, [step?.requiredView, onSwitchView]);
 
   useEffect(() => {
     const tooltipHeight = 280;
@@ -243,7 +285,15 @@ export function OnboardingTutorial({
 
         let bestPosition: TooltipPosition = "bottom";
 
-        if (spaceBottom >= tooltipHeight + GAP) {
+        if (step.preferredPosition === "top") {
+          bestPosition = "top";
+        } else if (step.preferredPosition === "bottom") {
+          bestPosition = "bottom";
+        } else if (step.preferredPosition === "left") {
+          bestPosition = "left";
+        } else if (step.preferredPosition === "right") {
+          bestPosition = "right";
+        } else if (spaceBottom >= tooltipHeight + GAP) {
           bestPosition = "bottom";
         } else if (spaceTop >= tooltipHeight + GAP) {
           bestPosition = "top";
@@ -269,7 +319,7 @@ export function OnboardingTutorial({
     return () => {
       cancelAnimationFrame(rafRef.current);
     };
-  }, [step?.targetId, tooltipWidth]);
+  }, [step?.targetId, step?.preferredPosition, tooltipWidth]);
 
   useEffect(() => {
     if (filteredSteps.length === 0) {
@@ -297,6 +347,7 @@ export function OnboardingTutorial({
     setIsExiting(true);
     setTimeout(() => {
       localStorage.setItem("buildify_tutorial_completed", "true");
+      sessionStorage.removeItem("buildify_tutorial_active");
       onComplete();
     }, 300);
   }
@@ -322,15 +373,22 @@ export function OnboardingTutorial({
       ),
     );
 
+    if (computedPosition === "top") {
+      const tooltipBottom = window.innerHeight - targetRect.top + GAP;
+      return {
+        position: "fixed",
+        bottom: tooltipBottom,
+        left: tooltipLeft,
+        width: tooltipWidth,
+        maxWidth: `calc(100vw - ${MARGIN * 2}px)`,
+      };
+    }
+
     let tooltipTop: number;
 
     switch (computedPosition) {
       case "bottom":
         tooltipTop = targetRect.top + targetRect.height + GAP;
-        break;
-      case "top":
-        tooltipTop = targetRect.top - tooltipHeight - GAP;
-        if (tooltipTop < MARGIN) tooltipTop = MARGIN;
         break;
       case "right":
         tooltipLeft = targetRect.left + targetRect.width + GAP;
@@ -479,33 +537,42 @@ export function OnboardingTutorial({
         >
           {hasTarget && targetRect ? (
             <>
-              <div
-                className="absolute inset-0 bg-black/70"
+              <svg
+                className="absolute inset-0 w-full h-full"
                 onClick={handleSkip}
-                style={{
-                  clipPath: `polygon(
-                    0% 0%,
-                    0% 100%,
-                    ${targetRect.left - 8}px 100%,
-                    ${targetRect.left - 8}px ${targetRect.top - 8}px,
-                    ${targetRect.left + targetRect.width + 8}px ${targetRect.top - 8}px,
-                    ${targetRect.left + targetRect.width + 8}px ${targetRect.top + targetRect.height + 8}px,
-                    ${targetRect.left - 8}px ${targetRect.top + targetRect.height + 8}px,
-                    ${targetRect.left - 8}px 100%,
-                    100% 100%,
-                    100% 0%
-                  )`,
-                }}
-              />
+                style={{ cursor: "pointer" }}
+              >
+                <defs>
+                  <mask id="spotlight-mask">
+                    <rect width="100%" height="100%" fill="white" />
+                    <rect
+                      x={targetRect.left - 8}
+                      y={targetRect.top - 8}
+                      width={targetRect.width + 16}
+                      height={targetRect.height + 16}
+                      rx={12}
+                      ry={12}
+                      fill="black"
+                    />
+                  </mask>
+                </defs>
+                <rect
+                  width="100%"
+                  height="100%"
+                  fill="rgba(0, 0, 0, 0.7)"
+                  mask="url(#spotlight-mask)"
+                />
+              </svg>
               <motion.div
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="absolute pointer-events-none rounded-xl"
+                className="absolute pointer-events-none"
                 style={{
                   top: targetRect.top - 8,
                   left: targetRect.left - 8,
                   width: targetRect.width + 16,
                   height: targetRect.height + 16,
+                  borderRadius: 12,
                   boxShadow:
                     "0 0 0 4px rgba(249, 115, 22, 0.5), 0 0 20px 8px rgba(249, 115, 22, 0.3)",
                 }}
@@ -577,7 +644,7 @@ export function OnboardingTutorial({
                       </div>
                     </motion.div>
 
-                    <div className="flex-1 pt-0.5 sm:pt-1 min-w-0">
+                    <div className="flex-1 pt-0.5 sm:pt-1 min-w-0 pr-8 sm:pr-6">
                       <motion.h2
                         initial={{ opacity: 0, x: 10 }}
                         animate={{ opacity: 1, x: 0 }}

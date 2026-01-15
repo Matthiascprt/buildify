@@ -43,6 +43,11 @@ import {
   Mail,
   FileText,
   Sparkles,
+  Briefcase,
+  Percent,
+  CreditCard,
+  Scale,
+  ChevronDown,
 } from "lucide-react";
 
 const MAX_AVATAR_URL =
@@ -53,6 +58,10 @@ const setupSchema = z.object({
   phone: z.string().min(1, "Le téléphone est obligatoire"),
   email: z.string().email("Email invalide").min(1, "L'email est obligatoire"),
   siret: z.string().min(1, "Le numéro SIRET est obligatoire"),
+  legal_status: z.string().optional(),
+  vat_rate: z.string().optional(),
+  payment_terms: z.string().optional(),
+  legal_notice: z.string().optional(),
 });
 
 type SetupFormValues = z.infer<typeof setupSchema>;
@@ -67,6 +76,8 @@ export default function SetupPage() {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
 
+  const [showOptional, setShowOptional] = useState(false);
+
   const form = useForm<SetupFormValues>({
     resolver: zodResolver(setupSchema),
     defaultValues: {
@@ -74,6 +85,10 @@ export default function SetupPage() {
       phone: "",
       email: "",
       siret: "",
+      legal_status: "",
+      vat_rate: "",
+      payment_terms: "",
+      legal_notice: "",
     },
   });
 
@@ -91,7 +106,19 @@ export default function SetupPage() {
             phone: company.phone || "",
             email: company.email || "",
             siret: company.siret || "",
+            legal_status: company.legal_status || "",
+            vat_rate: company.vat_rate ? String(company.vat_rate) : "",
+            payment_terms: company.payment_terms || "",
+            legal_notice: company.legal_notice || "",
           });
+          if (
+            company.legal_status ||
+            company.vat_rate ||
+            company.payment_terms ||
+            company.legal_notice
+          ) {
+            setShowOptional(true);
+          }
         } else {
           // No company exists yet, try to load name from localStorage (from onboarding)
           const pendingData = localStorage.getItem("pendingOnboardingDocument");
@@ -188,6 +215,10 @@ export default function SetupPage() {
         email: data.email,
         siret: data.siret,
         logo_url: logoUrl,
+        legal_status: data.legal_status || null,
+        vat_rate: data.vat_rate ? parseFloat(data.vat_rate) : null,
+        payment_terms: data.payment_terms || null,
+        legal_notice: data.legal_notice || null,
       });
 
       if (!result.success) {
@@ -306,7 +337,7 @@ export default function SetupPage() {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-zinc-900">
-              Bienvenue {companyName ? `chez ${companyName}` : ""} !
+              Bienvenue chez Buildify !
             </h1>
             <p className="text-zinc-500">
               Finalisez la configuration de votre entreprise
@@ -469,6 +500,117 @@ export default function SetupPage() {
               <p className="text-xs text-muted-foreground mt-2">
                 JPG ou PNG, max 2 Mo
               </p>
+            </div>
+
+            <div className="pt-4 border-t border-zinc-100">
+              <button
+                type="button"
+                onClick={() => setShowOptional(!showOptional)}
+                className="flex items-center justify-between w-full py-2 text-left"
+              >
+                <div className="flex items-center gap-2">
+                  <Briefcase className="w-4 h-4 text-zinc-400" />
+                  <span className="text-sm font-medium">
+                    Paramètres avancés
+                  </span>
+                  <span className="text-xs text-zinc-400">(optionnel)</span>
+                </div>
+                <ChevronDown
+                  className={`w-4 h-4 text-zinc-400 transition-transform ${showOptional ? "rotate-180" : ""}`}
+                />
+              </button>
+
+              {showOptional && (
+                <div className="space-y-4 pt-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="legal_status"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="flex items-center gap-2">
+                            <Scale className="w-4 h-4 text-zinc-400" />
+                            Forme juridique
+                          </FormLabel>
+                          <FormControl>
+                            <Input
+                              {...field}
+                              placeholder="Ex: SARL, SAS, Auto-entrepreneur..."
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="vat_rate"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="flex items-center gap-2">
+                            <Percent className="w-4 h-4 text-zinc-400" />
+                            TVA par défaut (%)
+                          </FormLabel>
+                          <FormControl>
+                            <Input
+                              {...field}
+                              type="number"
+                              step="0.1"
+                              min="0"
+                              max="100"
+                              placeholder="Ex: 10, 20..."
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <FormField
+                    control={form.control}
+                    name="payment_terms"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center gap-2">
+                          <CreditCard className="w-4 h-4 text-zinc-400" />
+                          Conditions de paiement
+                        </FormLabel>
+                        <FormControl>
+                          <Textarea
+                            {...field}
+                            placeholder="Ex: Paiement à réception de facture, Paiement à 30 jours..."
+                            className="min-h-[60px] resize-none"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="legal_notice"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center gap-2">
+                          <FileText className="w-4 h-4 text-zinc-400" />
+                          Mentions légales
+                        </FormLabel>
+                        <FormControl>
+                          <Textarea
+                            {...field}
+                            placeholder="Ex: TVA non applicable, art. 293 B du CGI..."
+                            className="min-h-[60px] resize-none"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              )}
             </div>
 
             <Button

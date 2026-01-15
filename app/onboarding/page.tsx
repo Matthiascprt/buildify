@@ -240,7 +240,21 @@ export default function OnboardingPage() {
       });
 
       if (authError) {
-        setError(authError.message);
+        if (authError.message.includes("already registered")) {
+          setError(
+            "Création impossible : cet email est déjà utilisé. Connectez-vous ou utilisez un autre email.",
+          );
+        } else {
+          setError(authError.message);
+        }
+        return;
+      }
+
+      // Check if user already exists (Supabase returns user with empty identities)
+      if (authData.user && authData.user.identities?.length === 0) {
+        setError(
+          "Création impossible : ce compte existe déjà. Connectez-vous ou utilisez un autre email.",
+        );
         return;
       }
 
@@ -388,8 +402,8 @@ export default function OnboardingPage() {
               />
               <div className="flex-1 bg-zinc-50 rounded-xl rounded-tl-none p-4">
                 <p className="text-zinc-700">
-                  Parfait <strong>{companyData.name}</strong> ! Décrivez-moi le
-                  devis ou la facture que vous souhaitez créer. Par exemple :
+                  Parfait ! Décrivez-moi le devis ou la facture que vous
+                  souhaitez créer. Par exemple :
                 </p>
                 <p className="text-zinc-500 text-sm mt-2 italic">
                   &quot;Devis pour M. Dupont, rénovation salle de bain : dépose

@@ -104,6 +104,8 @@ TVA par défaut: 10%
 - Si l'utilisateur dit "TTC" → convertis en HT: prix_ht = prix_ttc / (1 + tva/100)
 - Le champ unit_price_ht stocke TOUJOURS le prix HT
 - TVA 10% par défaut (taux standard pour les travaux du bâtiment)
+- Si l'utilisateur spécifie un taux de TVA (ex: "20%", "TVA à 5.5%", "taux de 20") → applique ce taux via vat_rate
+- Taux courants: 20% (standard), 10% (travaux), 5.5% (rénovation énergétique), 2.1% (presse)
 
 # PRECISION DES MONTANTS (CRITIQUE)
 - TOUJOURS utiliser le montant EXACT donné par l'utilisateur, à l'euro et centime près
@@ -127,6 +129,8 @@ TVA par défaut: 10%
 - "pour M. Dupont" → client_name="M. Dupont"
 - "facture pour M. Martin" → document_type="invoice", client_name="M. Martin"
 - "3 prises à 25€" → designation="Prises électriques", description="Fourniture et pose", quantity=3, unit_price_ht=25
+- "2 articles à 100€ avec TVA 20%" → designation="Articles divers", description="Fourniture", quantity=2, unit_price_ht=100, vat_rate=20
+- "isolation à TVA 5.5%" → vat_rate=5.5 (taux réduit rénovation énergétique)
 
 Génère le document immédiatement avec l'outil create_document.`;
 }
@@ -227,6 +231,20 @@ export async function POST(req: NextRequest) {
         const totalVAT = totalVATCents / 100;
         const totalTTC = totalTTCCents / 100;
 
+        const uniqueVatRates = [...new Set(lines.map((l) => l.vat_rate))].sort(
+          (a, b) => a - b,
+        );
+        let vatMessage = "";
+        if (uniqueVatRates.length === 1) {
+          const rate = uniqueVatRates[0];
+          vatMessage =
+            rate === 10
+              ? "\nLe taux de TVA par défaut est de 10%."
+              : `\nLe taux de TVA appliqué est de ${rate}%.`;
+        } else if (uniqueVatRates.length > 1) {
+          vatMessage = `\nTaux de TVA appliqués : ${uniqueVatRates.join("%, ")}%.`;
+        }
+
         const document: DocumentContent = {
           project_title: args.project_title || "Nouveau projet",
           lines,
@@ -239,9 +257,10 @@ export async function POST(req: NextRequest) {
         };
 
         const lineCount = lines.length;
+        const clientPart = args.client_name ? ` pour ${args.client_name}` : "";
         const aiResponse =
           lineCount > 0
-            ? `J'ai créé votre ${docLabel} "${args.project_title}" avec ${lineCount} ligne${lineCount > 1 ? "s" : ""} pour un total de ${totalTTC.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € TTC.`
+            ? `J'ai créé votre ${docLabel} "${args.project_title}"${clientPart} avec ${lineCount} ligne${lineCount > 1 ? "s" : ""} pour un total de ${totalTTC.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € TTC.${vatMessage}`
             : `J'ai préparé votre ${docLabel}.`;
 
         return NextResponse.json({
