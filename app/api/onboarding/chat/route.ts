@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
-import type { DocumentContent, DocumentLine } from "@/lib/supabase/types";
+import type {
+  DocumentContent,
+  DocumentSection,
+  DocumentSubsection,
+  DocumentLine,
+} from "@/lib/supabase/types";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -19,7 +24,7 @@ const onboardingTools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: "create_document",
       description:
-        "Create a quote (devis) or invoice (facture) with the specified lines. Use this to generate the document from the user's description.",
+        "Créer un devis ou une facture avec les lignes spécifiées. Utiliser immédiatement pour générer le document à partir de la description de l'utilisateur.",
       parameters: {
         type: "object",
         properties: {
@@ -27,42 +32,75 @@ const onboardingTools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
             type: "string",
             enum: ["quote", "invoice"],
             description:
-              "Type of document: 'quote' for devis, 'invoice' for facture. Default to 'quote' unless user explicitly mentions 'facture'.",
+              "Type de document: 'quote' = devis (défaut), 'invoice' = facture (si mentionné explicitement)",
           },
           project_title: {
             type: "string",
             description:
-              "A short professional title for the project (2-5 words)",
+              "Titre professionnel du projet (2-4 mots). Ex: 'Rénovation cuisine', 'Installation électrique'",
           },
           client_name: {
             type: "string",
-            description: "The client's name if mentioned",
+            description: "Nom du client si mentionné",
           },
           lines: {
             type: "array",
-            description: "The document lines",
+            description:
+              "Lignes du document. Chaque ligne doit avoir designation, description (6-12 mots), line_type, quantity, unit_price_ht.",
             items: {
               type: "object",
               properties: {
                 designation: {
                   type: "string",
-                  description: "The line item name",
+                  description: "Nom court de la prestation/matériel",
                 },
                 description: {
                   type: "string",
-                  description: "A brief description (3-8 words)",
+                  description:
+                    "Description professionnelle (6-12 mots) précisant le contexte",
                 },
-                quantity: { type: "number", description: "Quantity" },
+                line_type: {
+                  type: "string",
+                  enum: ["service", "material"],
+                  description:
+                    "'service' = main-d'œuvre/pose/installation, 'material' = fourniture/matériel",
+                },
+                quantity: { type: "number", description: "Quantité" },
+                unit: {
+                  type: "string",
+                  enum: [
+                    "m²",
+                    "m³",
+                    "m",
+                    "kg",
+                    "g",
+                    "L",
+                    "mL",
+                    "pack",
+                    "h",
+                    "t",
+                    "m²/h",
+                  ],
+                  description:
+                    "Unité de mesure (optionnel). UNIQUEMENT pour valeurs mesurables: m², m³, m, kg, L, h, etc. JAMAIS pour nombre simple d'articles.",
+                },
                 unit_price_ht: {
                   type: "number",
-                  description: "Unit price HT in euros",
+                  description:
+                    "Prix unitaire HT en euros (montant EXACT donné par l'utilisateur)",
                 },
                 vat_rate: {
                   type: "number",
-                  description: "VAT rate percentage (default 10)",
+                  description: "Taux de TVA en % (défaut 10)",
                 },
               },
-              required: ["designation", "quantity", "unit_price_ht"],
+              required: [
+                "designation",
+                "description",
+                "line_type",
+                "quantity",
+                "unit_price_ht",
+              ],
             },
           },
         },
@@ -76,63 +114,84 @@ function buildOnboardingSystemPrompt(
   companyName: string,
   activity: string,
 ): string {
-  return `Tu es Max, un assistant IA professionnel spécialisé dans la création de devis et factures.
+  return `Tu es Max, assistant IA pour la création de devis et factures pour une application SaaS française. Tu exécutes immédiatement la création du document via l'outil create_document.
 
-# CONTEXTE ENTREPRISE
-Nom: ${companyName}
-Activité: ${activity}
-TVA par défaut: 10%
+# 1. CONTEXTE
+Entreprise: ${companyName} (${activity})
+TVA par défaut: 10% (modifiable par l'utilisateur)
 
-# TON ROLE
-1. Comprendre la demande en langage naturel (français)
-2. Déterminer si l'utilisateur veut un DEVIS (quote) ou une FACTURE (invoice)
-3. Extraire les informations: client, lignes (désignation, quantité, prix), etc.
-4. Utiliser l'outil create_document pour générer le document immédiatement
-
-# DETECTION DU TYPE DE DOCUMENT
-- Par défaut, crée un DEVIS (document_type: "quote")
-- Si l'utilisateur mentionne "facture", "facturer", "à facturer" → FACTURE (document_type: "invoice")
-- "devis", "estimation", "chiffrer" → DEVIS (quote)
-
-# REGLES DE COMPORTEMENT "MODIFICATION-FIRST"
-- Si une action est possible → EXECUTE IMMEDIATEMENT
+# 2. COMPORTEMENT "CREATION IMMEDIATE"
+- Action demandée → EXECUTE IMMEDIATEMENT via create_document → puis réponds brièvement
 - Ne pose JAMAIS de question sauf ambiguïté bloquante
+- Ne demande JAMAIS de confirmation avant d'agir
 - Agis de façon déterministe et prévisible
+- Par défaut → DEVIS (quote)
+- "facture", "facturer", "à facturer" → FACTURE (invoice)
 
-# LOGIQUE FISCALE (CRITIQUE)
-- Par défaut, tout est en HT (Hors Taxes)
-- Si l'utilisateur dit "TTC" → convertis en HT: prix_ht = prix_ttc / (1 + tva/100)
-- Le champ unit_price_ht stocke TOUJOURS le prix HT
-- TVA 10% par défaut (taux standard pour les travaux du bâtiment)
-- Si l'utilisateur spécifie un taux de TVA (ex: "20%", "TVA à 5.5%", "taux de 20") → applique ce taux via vat_rate
-- Taux courants: 20% (standard), 10% (travaux), 5.5% (rénovation énergétique), 2.1% (presse)
+# 3. LIGNES ET DESCRIPTIONS
+Chaque ligne DOIT avoir:
+- designation: nom court de la prestation/matériel
+- description: 6-12 mots précisant le contexte (OBLIGATOIRE)
+- line_type: "service" ou "material" (OBLIGATOIRE)
 
-# PRECISION DES MONTANTS (CRITIQUE)
-- TOUJOURS utiliser le montant EXACT donné par l'utilisateur, à l'euro et centime près
-- "50€" → unit_price_ht = 50.00
-- "49.99€" → unit_price_ht = 49.99
-- "125.50€" → unit_price_ht = 125.50
-- Ne JAMAIS arrondir ou modifier les montants
-- Si conversion TTC→HT, arrondir à 2 décimales: Math.round(x * 100) / 100
+UNITES DE MESURE (optionnel - UNIQUEMENT pour valeurs mesurables et pertinentes):
+Unités autorisées: m², m³, m, kg, g, L, mL, pack, h, t, m²/h
+- Surfaces → "m²" (carrelage 15 m², peinture 20 m², parquet 30 m²)
+- Volumes → "m³" ou "L" ou "mL" (béton 2 m³, peinture 10 L)
+- Longueurs → "m" (câbles 50 m, plinthes 12 m)
+- Poids → "kg" ou "g" ou "t" (enduit 25 kg, sable 1 t)
+- Temps → "h" (main-d'œuvre 8 h, intervention 2 h)
+- Rendement → "m²/h" (pose carrelage 5 m²/h)
+- Lots → "pack" (pack de 10)
+JAMAIS d'unité pour: nombre simple d'articles (5 luminaires, 3 prises, 2 robinets → juste le chiffre).
 
-# GENERATION AUTOMATIQUE DES DESCRIPTIONS (OBLIGATOIRE)
-- TOUJOURS remplir le champ "description" pour chaque ligne ajoutée
-- La description doit être courte (3-8 mots) et professionnelle
-- Exemples:
-  → designation="Peinture murs" → description="Deux couches, finition satinée"
-  → designation="Luminaires LED" → description="Fourniture et pose"
-  → designation="Carrelage sol" → description="60x60 cm, pose droite"
+CLASSIFICATION line_type:
+- "service" → travail humain: pose, installation, main-d'œuvre, intervention, maintenance, dépose
+- "material" → produit physique: carrelage, peinture, luminaires, câbles, équipements, fournitures
 
-# EXEMPLES DE CONVERSION
-- "5 luminaires à 50€" → designation="Luminaires LED", description="Fourniture et pose", quantity=5, unit_price_ht=50
-- "rénovation salle de bain" → project_title="Rénovation salle de bain"
+REGLES:
+- Travail humain seul → service
+- Produit/matériau seul → material
+- Combinaison (ex: "Fourniture et pose") → séparer en 2 lignes OU service si travail prédominant
+
+EXEMPLES descriptions:
+- "Peinture murs" → "Deux couches, finition satinée blanc mat"
+- "Luminaires LED" → "Spots encastrés, fourniture et installation complète"
+- "Carrelage sol" → "Grès cérame 60x60, pose droite avec joints"
+- "Main d'œuvre électrique" → "Installation tableau et circuit cuisine"
+
+# 4. LOGIQUE FISCALE
+- TOUT est en HT (Hors Taxes) par défaut
+- total_ht = quantity × unit_price_ht (calculé auto)
+- TVA et TTC calculés automatiquement par l'application
+- Précision EXACTE des montants: 49.99€ → 49.99 (jamais arrondir)
+- Si utilisateur donne TTC → convertir: 60€ TTC à 20% = 50€ HT
+- TVA personnalisable via vat_rate (10% défaut, 20% standard, 5.5% rénovation énergétique)
+
+# 5. GENERATION AUTOMATIQUE
+project_title (OBLIGATOIRE):
+- Générer titre pro 2-4 mots basé sur le contenu
+- Exemples: "Rénovation cuisine", "Installation électrique", "Travaux peinture"
+
+# 6. COMMANDES FREQUENTES
+- "Ajoute 5 luminaires à 50€" → ligne material, quantity=5 (pas d'unité car articles)
+- "pose des luminaires 200€" → ligne service, quantity=1, unit_price_ht=200
 - "pour M. Dupont" → client_name="M. Dupont"
-- "facture pour M. Martin" → document_type="invoice", client_name="M. Martin"
-- "3 prises à 25€" → designation="Prises électriques", description="Fourniture et pose", quantity=3, unit_price_ht=25
-- "2 articles à 100€ avec TVA 20%" → designation="Articles divers", description="Fourniture", quantity=2, unit_price_ht=100, vat_rate=20
-- "isolation à TVA 5.5%" → vat_rate=5.5 (taux réduit rénovation énergétique)
+- "facture pour M. Martin" → document_type="invoice"
+- "Ajoute 10m² carrelage et pose" → 2 lignes: material (quantity=10, unit="m²") + service (quantity=10, unit="m²")
+- "3h de main d'œuvre à 45€" → ligne service, quantity=3, unit="h"
+- "20m de câble" → ligne material, quantity=20, unit="m"
+- "TVA 20%" → vat_rate=20
+- "En fait TTC" → convertir en HT selon TVA applicable
 
-Génère le document immédiatement avec l'outil create_document.`;
+# 7. ERREURS INTERDITES
+- Inventer des données
+- Oublier description ou line_type sur une ligne
+- Oublier project_title
+- Arrondir les montants
+- Utiliser total_ttc (uniquement total_ht)
+
+Sois efficace, autonome et professionnel. Génère le document immédiatement.`;
 }
 
 export async function POST(req: NextRequest) {
@@ -155,7 +214,7 @@ export async function POST(req: NextRequest) {
     ];
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
+      model: "gpt-4o-mini",
       messages,
       tools: onboardingTools,
       tool_choice: { type: "function", function: { name: "create_document" } },
@@ -181,7 +240,9 @@ export async function POST(req: NextRequest) {
           lines?: Array<{
             designation: string;
             description?: string;
+            line_type?: "service" | "material";
             quantity: number;
+            unit?: string;
             unit_price_ht: number;
             vat_rate?: number;
           }>;
@@ -197,31 +258,44 @@ export async function POST(req: NextRequest) {
         const isInvoice = documentType === "invoice";
         const docLabel = isInvoice ? "facture" : "devis";
 
-        const lines: DocumentLine[] = (args.lines || []).map((line, index) => {
-          const vatRate = line.vat_rate || 10;
-          const lineHT =
-            Math.round(line.quantity * line.unit_price_ht * 100) / 100;
-          const lineTTC = Math.round(lineHT * (1 + vatRate / 100) * 100) / 100;
+        // Create lines for the hierarchical structure
+        const lines: DocumentLine[] = (args.lines || []).map(
+          (
+            line: {
+              designation: string;
+              description?: string;
+              line_type?: "service" | "material";
+              quantity: number;
+              unit?: string;
+              unit_price_ht: number;
+              vat_rate?: number;
+            },
+            index: number,
+          ) => {
+            const vatRate = line.vat_rate || 10;
+            const lineHT =
+              Math.round(line.quantity * line.unit_price_ht * 100) / 100;
 
-          return {
-            line_id: crypto.randomUUID(),
-            line_number: index + 1,
-            designation: line.designation,
-            description: line.description || "",
-            quantity: line.quantity,
-            unit_price_ht: line.unit_price_ht,
-            vat_rate: vatRate,
-            total_ttc: lineTTC,
-          };
-        });
+            return {
+              line_id: crypto.randomUUID(),
+              line_number: `1.1.${index + 1}`,
+              designation: line.designation,
+              description: line.description || "",
+              line_type: line.line_type || "service",
+              quantity: line.quantity,
+              unit: line.unit,
+              unit_price_ht: line.unit_price_ht,
+              vat_rate: vatRate,
+              total_ht: lineHT,
+            };
+          },
+        );
 
         // Calculate totals using same logic as editor (cents-based for precision)
         let totalHTCents = 0;
         let totalVATCents = 0;
         for (const line of lines) {
-          const lineHTCents = Math.round(
-            line.quantity * line.unit_price_ht * 100,
-          );
+          const lineHTCents = Math.round(line.total_ht * 100);
           totalHTCents += lineHTCents;
           totalVATCents += Math.round((lineHTCents * line.vat_rate) / 100);
         }
@@ -245,9 +319,26 @@ export async function POST(req: NextRequest) {
           vatMessage = `\nTaux de TVA appliqués : ${uniqueVatRates.join("%, ")}%.`;
         }
 
+        // Create hierarchical structure with a single section and subsection
+        const subsection: DocumentSubsection = {
+          subsection_id: crypto.randomUUID(),
+          subsection_number: "1.1",
+          subsection_label: "Prestations",
+          total_ht: totalHT,
+          lines,
+        };
+
+        const section: DocumentSection = {
+          section_id: crypto.randomUUID(),
+          section_number: "1",
+          section_label: args.project_title || "Nouveau projet",
+          total_ht: totalHT,
+          subsections: [subsection],
+        };
+
         const document: DocumentContent = {
           project_title: args.project_title || "Nouveau projet",
-          lines,
+          sections: [section],
           totals: {
             total_ht: totalHT,
             total_vat: totalVAT,

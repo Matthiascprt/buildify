@@ -28,10 +28,10 @@ export default async function AppLayout({
 
   return (
     <ThemeProvider initialTheme={userTheme}>
-      <div className="h-screen bg-sidebar overflow-hidden">
+      <div className="fixed inset-0 bg-sidebar overflow-hidden">
         <Sidebar user={user} />
         <BottomNav user={user} />
-        <div className="flex flex-col h-full lg:pl-60 pb-16 lg:pb-0 overflow-hidden lg:overflow-auto">
+        <div className="flex flex-col h-full lg:pl-60 pb-16 lg:pb-0 overflow-hidden">
           <div className="flex-1 flex flex-col m-0 lg:m-3 lg:ml-0 bg-background lg:rounded-2xl lg:border lg:border-sidebar-border overflow-hidden">
             <main className="flex-1 overflow-auto">{children}</main>
           </div>

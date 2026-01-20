@@ -8,6 +8,7 @@ import {
   getNextInvoiceNumber,
   getClient,
 } from "@/lib/supabase/api";
+import { checkQuotaAvailable } from "@/lib/supabase/subscription";
 import { EditionClient } from "./edition-client";
 import type { DocumentData } from "@/lib/types/document";
 import {
@@ -21,13 +22,14 @@ interface EditionPageProps {
 
 export default async function EditionPage({ searchParams }: EditionPageProps) {
   const params = await searchParams;
-  const [profile, company, clients, nextQuoteNumber, nextInvoiceNumber] =
+  const [profile, company, clients, nextQuoteNumber, nextInvoiceNumber, quota] =
     await Promise.all([
       getProfile(),
       getCompany(),
       getClients(),
       getNextQuoteNumber(),
       getNextInvoiceNumber(),
+      checkQuotaAvailable(),
     ]);
 
   const userInitial = profile?.last_name?.charAt(0).toUpperCase() || "U";
@@ -67,6 +69,7 @@ export default async function EditionPage({ searchParams }: EditionPageProps) {
       initialNextInvoiceNumber={nextInvoiceNumber}
       initialDocument={initialDocument}
       initialAccentColor={initialAccentColor}
+      initialQuota={quota}
     />
   );
 }

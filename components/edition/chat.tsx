@@ -8,16 +8,7 @@ import {
   forwardRef,
   useImperativeHandle,
 } from "react";
-import {
-  Send,
-  Mic,
-  MicOff,
-  UserPlus,
-  Plus,
-  FileCheck,
-  FilePenLine,
-  Eye,
-} from "lucide-react";
+import { Send, Mic, MicOff, AlertTriangle, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -43,6 +34,16 @@ interface Message {
   content: string;
 }
 
+export interface QuotaInfo {
+  available: boolean;
+  remaining: number;
+  limit: number;
+  used: number;
+  status: string | null;
+  plan: "standard" | "pro" | null;
+  nextResetDate: string | null;
+}
+
 interface ChatProps {
   userInitial?: string;
   company: Company | null;
@@ -55,9 +56,10 @@ interface ChatProps {
   accentColor?: string | null;
   onAccentColorChange?: (color: string | null) => void;
   onClientCreated?: (client: Client) => void;
-  onSwitchToPreview?: () => void;
   onDownloadPdf?: () => void;
   onConvertToInvoice?: () => Promise<{ success: boolean; error?: string }>;
+  quota: QuotaInfo;
+  onQuotaChange?: (quota: QuotaInfo) => void;
 }
 
 export const Chat = forwardRef<ChatRef, ChatProps>(function Chat(
@@ -73,15 +75,14 @@ export const Chat = forwardRef<ChatRef, ChatProps>(function Chat(
     accentColor,
     onAccentColorChange,
     onClientCreated,
-    onSwitchToPreview,
     onDownloadPdf,
     onConvertToInvoice,
+    quota,
+    onQuotaChange,
   },
   ref,
 ) {
-  const [isEditingExisting, setIsEditingExisting] = useState(
-    initialIsEditingExisting,
-  );
+  const [, setIsEditingExisting] = useState(initialIsEditingExisting);
 
   const getInitialMessage = () => {
     if (initialIsEditingExisting) {
@@ -208,12 +209,6 @@ export const Chat = forwardRef<ChatRef, ChatProps>(function Chat(
       startRecording();
     }
   }, [isRecording, startRecording, stopRecording]);
-
-  // Show client picker button when document exists and no client is linked
-  // Check both id AND name to ensure client is properly linked
-  const hasClientLinked = document?.client?.id || document?.client?.name;
-  const shouldShowClientButton =
-    document !== null && !hasClientLinked && !isEditingExisting;
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -479,9 +474,6 @@ export const Chat = forwardRef<ChatRef, ChatProps>(function Chat(
   };
 
   const handleQuickAction = async (type: "quote" | "invoice") => {
-    setShowQuickActions(false);
-    setIsLoading(true);
-
     const documentCompany: DocumentCompany = {
       name: company?.name || "",
       address: company?.address || "",
@@ -511,7 +503,10 @@ export const Chat = forwardRef<ChatRef, ChatProps>(function Chat(
       );
     }
 
-    // Save document to database
+    // Show document immediately
+    onDocumentChange(newDocument);
+
+    // Save document to database in background
     try {
       const content = documentDataToContent(newDocument);
 
@@ -534,8 +529,6 @@ export const Chat = forwardRef<ChatRef, ChatProps>(function Chat(
         color: null,
       };
 
-      console.log("[DEBUG] Creating document:", requestBody);
-
       const response = await fetch("/api/documents", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -543,47 +536,24 @@ export const Chat = forwardRef<ChatRef, ChatProps>(function Chat(
       });
 
       const responseData = await response.json();
-      console.log("[DEBUG] API response:", response.status, responseData);
 
       if (response.ok && responseData.document) {
-        newDocument = {
+        onDocumentChange({
           ...newDocument,
           id: responseData.document.id,
-        };
-        console.log("[DEBUG] Document created with ID:", newDocument.id);
-      } else {
-        console.error("[DEBUG] Failed to create document:", responseData.error);
+        });
+        if (onQuotaChange) {
+          onQuotaChange({
+            ...quota,
+            used: quota.used + 1,
+            remaining: Math.max(0, quota.remaining - 1),
+            available: quota.remaining - 1 > 0,
+          });
+        }
       }
     } catch (error) {
-      console.error("[DEBUG] Failed to save document:", error);
+      console.error("Failed to save document:", error);
     }
-
-    onDocumentChange(newDocument);
-
-    // Add user message
-    const userContent =
-      type === "quote"
-        ? "Je souhaite créer un devis"
-        : "Je souhaite créer une facture";
-
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: "user",
-      content: userContent,
-    };
-
-    // Add assistant response asking about client
-    const assistantMessage: Message = {
-      id: (Date.now() + 1).toString(),
-      role: "assistant",
-      content:
-        type === "quote"
-          ? "Très bien ! Quel client souhaitez-vous lier à ce devis ? Sélectionnez-le ci-dessous ou dites-le moi."
-          : "Très bien ! Quel client souhaitez-vous lier à cette facture ? Sélectionnez-le ci-dessous ou dites-le moi.",
-    };
-
-    setMessages((prev) => [...prev, userMessage, assistantMessage]);
-    setIsLoading(false);
   };
 
   // Welcome screen shown only on initial state (no document, no interaction)
@@ -591,163 +561,153 @@ export const Chat = forwardRef<ChatRef, ChatProps>(function Chat(
 
   if (showWelcomeScreen) {
     return (
-      <div className="relative h-full flex flex-col overflow-hidden bg-linear-to-b from-background via-background to-orange-50/30 dark:to-orange-950/10">
-        {/* Animated background elements */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -top-40 -right-40 w-[500px] h-[500px] bg-linear-to-br from-orange-400/20 via-amber-300/15 to-transparent rounded-full blur-3xl" />
-          <div className="absolute -bottom-40 -left-40 w-[400px] h-[400px] bg-linear-to-tr from-amber-400/15 via-orange-300/10 to-transparent rounded-full blur-3xl" />
-        </div>
+      <div className="h-full flex flex-col relative overflow-hidden bg-gradient-to-br from-neutral-50 via-white to-orange-50/30 dark:from-neutral-950 dark:via-neutral-900 dark:to-neutral-950">
+        {/* Ambient glow effects */}
+        <div className="absolute top-0 left-0 w-[500px] h-[500px] bg-gradient-to-br from-orange-500/20 via-orange-400/10 to-transparent rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2 pointer-events-none" />
+        <div className="absolute bottom-0 right-0 w-[400px] h-[400px] bg-gradient-to-tl from-orange-600/15 via-amber-500/5 to-transparent rounded-full blur-3xl translate-x-1/3 translate-y-1/3 pointer-events-none" />
 
-        {/* Main content */}
-        <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-6 py-12">
-          <div className="w-full max-w-3xl mx-auto">
-            {/* Hero section */}
-            <div className="text-center mb-12">
-              {/* Max Avatar - larger and more prominent */}
-              <div className="relative inline-block mb-8">
-                <div className="absolute -inset-6 bg-linear-to-r from-orange-500/30 via-amber-400/20 to-orange-500/30 rounded-full blur-2xl animate-pulse" />
+        {/* Subtle grid pattern */}
+        <div
+          className="absolute inset-0 pointer-events-none opacity-[0.015] dark:opacity-[0.03]"
+          style={{
+            backgroundImage: `linear-gradient(rgba(0,0,0,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.1) 1px, transparent 1px)`,
+            backgroundSize: "32px 32px",
+          }}
+        />
+
+        <div className="relative z-10 flex-1 px-6 sm:px-8 lg:px-12 overflow-y-auto">
+          <div className="max-w-md mx-auto sm:mx-0">
+            {/* Header section */}
+            <div className="pt-10 sm:pt-14 pb-10">
+              <div className="flex items-center gap-3 mb-10">
                 <div className="relative">
-                  <Avatar className="h-28 w-28 ring-[3px] ring-white dark:ring-neutral-800 shadow-2xl shadow-orange-500/20">
+                  <Avatar className="h-14 w-14 ring-4 ring-white/80 dark:ring-neutral-800/80 shadow-xl shadow-orange-500/20">
                     <AvatarImage
                       src="https://ckvcijpgohqlnvoinwmc.supabase.co/storage/v1/object/public/buildify-assets/Logo/Agent%20IA.png"
                       alt="Max"
                       className="object-cover"
                     />
-                    <AvatarFallback className="bg-linear-to-br from-orange-500 to-amber-500 text-white text-3xl font-bold">
+                    <AvatarFallback className="bg-gradient-to-br from-orange-500 to-orange-600 text-white font-semibold text-lg">
                       M
                     </AvatarFallback>
                   </Avatar>
-                  {/* Online indicator */}
-                  <span className="absolute bottom-1 right-1 h-5 w-5 bg-emerald-500 rounded-full border-[3px] border-white dark:border-neutral-800" />
+                  <span className="absolute -bottom-0.5 -right-0.5 h-4 w-4 bg-emerald-400 rounded-full ring-[3px] ring-white dark:ring-neutral-900 shadow-lg" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400">
+                    Assistant IA
+                  </p>
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                    <Sparkles className="h-3 w-3" />
+                    En ligne
+                  </p>
                 </div>
               </div>
 
-              {/* Title */}
-              <h1 className="text-4xl sm:text-5xl font-bold tracking-tight mb-4">
-                <span className="bg-linear-to-r from-neutral-900 via-neutral-800 to-neutral-900 dark:from-white dark:via-neutral-100 dark:to-white bg-clip-text text-transparent">
-                  Bonjour, je suis{" "}
-                </span>
-                <span className="bg-linear-to-r from-orange-500 via-amber-500 to-orange-600 bg-clip-text text-transparent">
-                  Max
+              <h1 className="text-3xl sm:text-4xl font-bold text-neutral-900 dark:text-white leading-tight tracking-tight">
+                Que souhaitez-vous
+                <span className="block bg-gradient-to-r from-orange-600 via-orange-500 to-amber-500 bg-clip-text text-transparent">
+                  créer aujourd&apos;hui ?
                 </span>
               </h1>
-              <p className="text-lg text-muted-foreground max-w-md mx-auto">
-                Votre assistant intelligent pour créer des devis et factures
-                professionnels
+              <p className="mt-3 text-neutral-500 dark:text-neutral-400 text-base">
+                Créez vos documents professionnels en quelques secondes
               </p>
             </div>
 
-            {/* Action cards */}
-            <div className="grid sm:grid-cols-2 gap-5 max-w-2xl mx-auto">
-              {/* Quote Card */}
-              <button
-                onClick={() => handleQuickAction("quote")}
-                disabled={isLoading}
-                className="group relative p-6 rounded-2xl text-left transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 hover:border-orange-300 dark:hover:border-orange-700 shadow-sm hover:shadow-xl hover:shadow-orange-500/10"
-              >
-                {/* Gradient overlay on hover */}
-                <div className="absolute inset-0 rounded-2xl bg-linear-to-br from-orange-500/5 via-transparent to-amber-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-
-                <div className="relative">
-                  {/* Icon */}
-                  <div className="h-12 w-12 rounded-lg border border-orange-200 dark:border-orange-900 bg-orange-50 dark:bg-orange-950/20 flex items-center justify-center mb-4 group-hover:bg-orange-100 dark:group-hover:bg-orange-950/30 transition-colors">
-                    <FileCheck className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+            {/* Quota warning */}
+            {!quota.available && (
+              <div className="mb-6 rounded-2xl bg-white/70 dark:bg-neutral-900/70 backdrop-blur-xl border border-orange-200/50 dark:border-orange-900/50 shadow-lg shadow-orange-500/5 p-5">
+                <div className="flex items-start gap-4">
+                  <div className="shrink-0 h-10 w-10 rounded-xl bg-gradient-to-br from-orange-100 to-amber-100 dark:from-orange-900/50 dark:to-amber-900/50 flex items-center justify-center">
+                    <AlertTriangle className="h-5 w-5 text-orange-600 dark:text-orange-400" />
                   </div>
-
-                  {/* Text */}
-                  <h3 className="text-xl font-semibold text-foreground mb-2">
-                    Créer un devis
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    Générez un devis professionnel en quelques secondes
-                  </p>
-
-                  {/* Arrow */}
-                  <div className="absolute top-6 right-6 h-8 w-8 rounded-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 group-hover:translate-x-1">
-                    <svg
-                      className="h-4 w-4 text-orange-500"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 5l7 7-7 7"
-                      />
-                    </svg>
+                  <div className="flex-1">
+                    <p className="font-semibold text-neutral-900 dark:text-white mb-1">
+                      Limite atteinte
+                    </p>
+                    <p className="text-sm text-neutral-600 dark:text-neutral-400">
+                      {quota.used}/{quota.limit} documents utilisés
+                      {quota.nextResetDate && (
+                        <>
+                          {" "}
+                          · Réinitialisation le{" "}
+                          {new Date(quota.nextResetDate).toLocaleDateString(
+                            "fr-FR",
+                            { day: "numeric", month: "long" },
+                          )}
+                        </>
+                      )}
+                    </p>
+                    {quota.plan === "standard" && (
+                      <Button
+                        onClick={() => (window.location.href = "/billing")}
+                        className="mt-3 h-9 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white shadow-lg shadow-orange-500/25 border-0"
+                        size="sm"
+                      >
+                        Passer au plan Pro
+                      </Button>
+                    )}
                   </div>
                 </div>
-              </button>
+              </div>
+            )}
 
-              {/* Invoice Card */}
-              <button
-                onClick={() => handleQuickAction("invoice")}
-                disabled={isLoading}
-                className="group relative p-6 rounded-2xl text-left transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 hover:border-orange-300 dark:hover:border-orange-700 shadow-sm hover:shadow-xl hover:shadow-orange-500/10"
-              >
-                {/* Gradient overlay on hover */}
-                <div className="absolute inset-0 rounded-2xl bg-linear-to-br from-amber-500/5 via-transparent to-orange-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            {/* Main action cards */}
+            <div className="space-y-4 pb-10">
+              <p className="text-xs font-semibold text-neutral-400 dark:text-neutral-500 uppercase tracking-wider mb-3">
+                Créer un document
+              </p>
 
-                <div className="relative">
-                  {/* Icon */}
-                  <div className="h-12 w-12 rounded-lg border border-orange-200 dark:border-orange-900 bg-orange-50 dark:bg-orange-950/20 flex items-center justify-center mb-4 group-hover:bg-orange-100 dark:group-hover:bg-orange-950/30 transition-colors">
-                    <FilePenLine className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+              <div className="grid grid-cols-2 gap-4">
+                <button
+                  onClick={() => handleQuickAction("quote")}
+                  disabled={isLoading}
+                  className="group relative p-5 rounded-2xl text-left transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed bg-white/80 dark:bg-neutral-900/80 backdrop-blur-xl border border-neutral-200/60 dark:border-neutral-800/60 shadow-lg shadow-neutral-900/5 dark:shadow-black/20 hover:shadow-xl hover:shadow-orange-500/10 hover:border-orange-300/50 dark:hover:border-orange-700/50 hover:-translate-y-1 hover:bg-white dark:hover:bg-neutral-900"
+                >
+                  <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-orange-500/0 to-amber-500/0 group-hover:from-orange-500/5 group-hover:to-amber-500/5 transition-all duration-300" />
+                  <div className="relative">
+                    <h3 className="font-semibold text-neutral-900 dark:text-white text-lg">
+                      Devis
+                    </h3>
+                    <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-1">
+                      Proposition commerciale
+                    </p>
                   </div>
+                </button>
 
-                  {/* Text */}
-                  <h3 className="text-xl font-semibold text-foreground mb-2">
-                    Créer une facture
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    Émettez une facture conforme en un instant
-                  </p>
-
-                  {/* Arrow */}
-                  <div className="absolute top-6 right-6 h-8 w-8 rounded-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 group-hover:translate-x-1">
-                    <svg
-                      className="h-4 w-4 text-orange-500"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 5l7 7-7 7"
-                      />
-                    </svg>
+                <button
+                  onClick={() => handleQuickAction("invoice")}
+                  disabled={isLoading}
+                  className="group relative p-5 rounded-2xl text-left transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed bg-white/80 dark:bg-neutral-900/80 backdrop-blur-xl border border-neutral-200/60 dark:border-neutral-800/60 shadow-lg shadow-neutral-900/5 dark:shadow-black/20 hover:shadow-xl hover:shadow-orange-500/10 hover:border-orange-300/50 dark:hover:border-orange-700/50 hover:-translate-y-1 hover:bg-white dark:hover:bg-neutral-900"
+                >
+                  <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-orange-500/0 to-amber-500/0 group-hover:from-orange-500/5 group-hover:to-amber-500/5 transition-all duration-300" />
+                  <div className="relative">
+                    <h3 className="font-semibold text-neutral-900 dark:text-white text-lg">
+                      Facture
+                    </h3>
+                    <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-1">
+                      Document de facturation
+                    </p>
                   </div>
-                </div>
-              </button>
+                </button>
+              </div>
             </div>
 
-            {/* Loading indicator */}
+            {/* Loading state */}
             {isLoading && (
-              <div className="mt-8 flex items-center justify-center gap-3">
-                <div className="flex gap-1.5">
-                  <span className="h-2.5 w-2.5 animate-bounce rounded-full bg-orange-500 [animation-delay:-0.3s]" />
-                  <span className="h-2.5 w-2.5 animate-bounce rounded-full bg-orange-500 [animation-delay:-0.15s]" />
-                  <span className="h-2.5 w-2.5 animate-bounce rounded-full bg-orange-500" />
+              <div className="fixed bottom-8 left-1/2 -translate-x-1/2 sm:static sm:translate-x-0 sm:mt-4">
+                <div className="flex items-center gap-3 px-5 py-3 rounded-full bg-white/90 dark:bg-neutral-900/90 backdrop-blur-xl shadow-xl shadow-neutral-900/10 border border-neutral-200/50 dark:border-neutral-800/50">
+                  <div className="h-4 w-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+                  <span className="text-sm font-medium text-neutral-600 dark:text-neutral-300">
+                    Création en cours...
+                  </span>
                 </div>
-                <span className="text-sm font-medium text-muted-foreground">
-                  Création en cours...
-                </span>
               </div>
             )}
           </div>
         </div>
 
-        {/* Bottom decoration */}
-        <div className="relative z-10 pb-8 text-center">
-          <p className="text-xs text-muted-foreground/60">
-            Propulsé par l&apos;intelligence artificielle
-          </p>
-        </div>
-
-        {/* Modals */}
         <ClientPickerModal
           clients={clients}
           isOpen={showClientPicker}
@@ -804,18 +764,6 @@ export const Chat = forwardRef<ChatRef, ChatProps>(function Chat(
               </p>
             </div>
           </div>
-          {/* Switch to preview button - visible on screens smaller than 2xl */}
-          {onSwitchToPreview && document && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="2xl:hidden h-9 w-9 rounded-full bg-muted hover:bg-muted/80"
-              onClick={onSwitchToPreview}
-              title="Voir l'aperçu"
-            >
-              <Eye className="h-4 w-4 text-muted-foreground" />
-            </Button>
-          )}
         </div>
       </div>
 
@@ -864,33 +812,6 @@ export const Chat = forwardRef<ChatRef, ChatProps>(function Chat(
                     {message.content}
                   </p>
                 </div>
-                {shouldShowClientButton &&
-                  message.role === "assistant" &&
-                  message ===
-                    messages.filter((m) => m.role === "assistant").pop() && (
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="rounded-full gap-2"
-                        onClick={() => setShowClientPicker(true)}
-                        disabled={isLoading}
-                      >
-                        <UserPlus className="h-4 w-4" />
-                        Lier un client
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="rounded-full gap-2"
-                        onClick={() => setShowNewClientModal(true)}
-                        disabled={isLoading}
-                      >
-                        <Plus className="h-4 w-4" />
-                        Nouveau client
-                      </Button>
-                    </div>
-                  )}
               </div>
             </div>
           ))}
@@ -917,40 +838,94 @@ export const Chat = forwardRef<ChatRef, ChatProps>(function Chat(
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="border-t p-4">
-        <div className="flex gap-2">
-          <Button
-            type="button"
-            variant={isRecording ? "destructive" : "outline"}
-            size="icon"
-            className={cn("shrink-0", isRecording && "animate-pulse")}
-            onClick={toggleRecording}
-            data-tour-id="tour-mic-button"
-          >
-            {isRecording ? (
-              <MicOff className="h-4 w-4" />
-            ) : (
-              <Mic className="h-4 w-4" />
-            )}
-          </Button>
-          <Textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Tapez votre message..."
-            className="min-h-10 max-h-32 resize-none"
-            rows={1}
-            data-tour-id="tour-chat-input"
-          />
-          <Button
-            type="submit"
-            size="icon"
-            disabled={!input.trim() || isLoading}
-          >
-            <Send className="h-4 w-4" />
-          </Button>
+      {/* Quota limit reached message */}
+      {!quota.available ? (
+        <div className="border-t p-4">
+          <div className="rounded-lg bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 p-4">
+            <div className="flex items-start gap-3">
+              <div className="shrink-0 h-10 w-10 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center">
+                <AlertTriangle className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-orange-800 dark:text-orange-200 mb-1">
+                  Limite de documents atteinte
+                </p>
+                <p className="text-sm text-orange-700 dark:text-orange-300 mb-3">
+                  Vous avez utilisé {quota.used}/{quota.limit} documents ce
+                  mois-ci. L&apos;assistant IA n&apos;est plus disponible.
+                  {quota.nextResetDate && (
+                    <>
+                      {" "}
+                      Compteur remis à zéro le{" "}
+                      {new Date(quota.nextResetDate).toLocaleDateString(
+                        "fr-FR",
+                        { day: "numeric", month: "long", year: "numeric" },
+                      )}
+                      .
+                    </>
+                  )}
+                </p>
+                {quota.plan === "standard" ? (
+                  <Button
+                    onClick={() => (window.location.href = "/billing")}
+                    className="bg-orange-600 hover:bg-orange-700 text-white"
+                    size="sm"
+                  >
+                    Passer au plan Pro
+                  </Button>
+                ) : (
+                  <p className="text-sm text-orange-700 dark:text-orange-300">
+                    Contactez-nous pour un plan personnalisé :{" "}
+                    <a
+                      href="mailto:buildifyfrance@gmail.com"
+                      className="font-medium underline hover:no-underline"
+                    >
+                      buildifyfrance@gmail.com
+                    </a>
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
-      </form>
+      ) : (
+        <form onSubmit={handleSubmit} className="border-t p-3 sm:p-4">
+          <div className="flex gap-2 sm:gap-3 items-end">
+            <Button
+              type="button"
+              variant={isRecording ? "destructive" : "outline"}
+              className={cn(
+                "shrink-0 h-11 w-11 sm:h-10 sm:w-10 rounded-full",
+                isRecording && "animate-pulse",
+              )}
+              onClick={toggleRecording}
+              data-tour-id="tour-mic-button"
+            >
+              {isRecording ? (
+                <MicOff className="h-5 w-5 sm:h-4 sm:w-4" />
+              ) : (
+                <Mic className="h-5 w-5 sm:h-4 sm:w-4" />
+              )}
+            </Button>
+            <Textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Tapez votre message..."
+              className="min-h-11 sm:min-h-10 max-h-32 resize-none text-base sm:text-sm rounded-xl"
+              rows={1}
+              data-tour-id="tour-chat-input"
+            />
+            <Button
+              type="submit"
+              className="shrink-0 h-11 w-11 sm:h-10 sm:w-10 rounded-full"
+              disabled={!input.trim() || isLoading}
+            >
+              <Send className="h-5 w-5 sm:h-4 sm:w-4" />
+            </Button>
+          </div>
+        </form>
+      )}
     </div>
   );
 });

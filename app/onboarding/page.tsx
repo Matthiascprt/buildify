@@ -1,9 +1,15 @@
 "use client";
 
-import { useState, useTransition, useRef, useCallback, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import {
+  Suspense,
+  useState,
+  useTransition,
+  useRef,
+  useCallback,
+  useEffect,
+} from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
-import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowRight,
@@ -17,7 +23,6 @@ import {
   Sparkles,
   Mic,
   MicOff,
-  ExternalLink,
   Mail,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -35,6 +40,41 @@ type OnboardingStep =
 
 const MAX_AVATAR_URL =
   "https://ckvcijpgohqlnvoinwmc.supabase.co/storage/v1/object/public/buildify-assets/Logo/Agent%20IA.png";
+
+const pricingPlans = [
+  {
+    id: "standard",
+    name: "Standard",
+    description: "Parfait pour les artisans indépendants",
+    monthlyPrice: "29,90",
+    yearlyPrice: "299,90",
+    yearlyMonthlyPrice: "24,90",
+    features: [
+      "50 documents/mois",
+      "Création et édition devis/factures",
+      "Dictée vocale IA",
+      "PDF export et génération automatique",
+      "Gestion clients & contacts",
+    ],
+    popular: false,
+  },
+  {
+    id: "pro",
+    name: "Pro",
+    description: "Pour les artisans avec plus de volume",
+    monthlyPrice: "49,90",
+    yearlyPrice: "499,90",
+    yearlyMonthlyPrice: "41,90",
+    features: [
+      "100 documents/mois",
+      "Création et édition devis/factures",
+      "Dictée vocale IA",
+      "PDF export et génération automatique",
+      "Gestion clients & contacts",
+    ],
+    popular: true,
+  },
+];
 
 const fadeInUp = {
   initial: { opacity: 0, y: 20 },
@@ -62,12 +102,22 @@ const detectDocumentTypeFromMessage = (
     : "quote";
 };
 
-export default function OnboardingPage() {
+function OnboardingContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
   const [isPending, startTransition] = useTransition();
 
+  const planFromUrl = searchParams.get("plan");
+  const billingFromUrl = searchParams.get("billing");
+  const initialPlan = planFromUrl === "standard" ? "standard" : "pro";
+  const initialBilling = billingFromUrl === "monthly" ? false : true;
+
   const [step, setStep] = useState<OnboardingStep>("questions");
+  const [selectedPlan, setSelectedPlan] = useState<"standard" | "pro">(
+    initialPlan,
+  );
+  const [isYearly, setIsYearly] = useState(initialBilling);
   const [companyData, setCompanyData] = useState({
     activity: "",
     name: "",
@@ -91,14 +141,11 @@ export default function OnboardingPage() {
     email: "",
     password: "",
     confirmPassword: "",
-    cardNumber: "",
-    cardExpiry: "",
-    cardCvc: "",
   });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
-  const [countdown, setCountdown] = useState(5);
+  const [countdown] = useState(5);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
 
   useEffect(() => {
@@ -236,6 +283,7 @@ export default function OnboardingPage() {
             first_name: signupData.firstName,
             last_name: signupData.lastName,
           },
+          emailRedirectTo: `${window.location.origin}/auth/callback?next=/login`,
         },
       });
 
@@ -271,22 +319,33 @@ export default function OnboardingPage() {
             }),
           );
         }
-      }
 
-      // Go to confirmation step with countdown
-      setStep("confirmation");
-      setCountdown(5);
+        try {
+          const response = await fetch("/api/stripe/checkout", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              plan: selectedPlan,
+              isYearly,
+              email: signupData.email,
+              userId: authData.user.id,
+            }),
+          });
 
-      // Start countdown
-      const interval = setInterval(() => {
-        setCountdown((prev) => {
-          if (prev <= 1) {
-            clearInterval(interval);
-            return 0;
+          const data = await response.json();
+
+          if (data.url) {
+            window.location.href = data.url;
+            return;
+          } else {
+            setError("Erreur lors de la création de la session de paiement");
+            return;
           }
-          return prev - 1;
-        });
-      }, 1000);
+        } catch {
+          setError("Erreur de connexion au service de paiement");
+          return;
+        }
+      }
     });
   };
 
@@ -391,26 +450,41 @@ export default function OnboardingPage() {
             transition={{ duration: 0.4 }}
             className="bg-white rounded-2xl shadow-xl shadow-zinc-200/50 border border-zinc-100 p-8 md:p-10"
           >
-            <div className="flex items-center gap-4 mb-6">
-              <Image
-                src={MAX_AVATAR_URL}
-                alt="Max"
-                width={48}
-                height={48}
-                className="rounded-full ring-2 ring-orange-100"
-                unoptimized
-              />
-              <div className="flex-1 bg-zinc-50 rounded-xl rounded-tl-none p-4">
-                <p className="text-zinc-700">
-                  Parfait ! Décrivez-moi le devis ou la facture que vous
-                  souhaitez créer. Par exemple :
-                </p>
-                <p className="text-zinc-500 text-sm mt-2 italic">
-                  &quot;Devis pour M. Dupont, rénovation salle de bain : dépose
-                  carrelage 15m² à 25€/m², pose faïence 25m² à 85€/m², douche
-                  italienne 1 550€&quot;
-                </p>
+            <div className="text-center mb-8">
+              <div className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary to-orange-500 text-white rounded-full text-base font-semibold mb-6 shadow-lg shadow-primary/30">
+                <Sparkles className="w-5 h-5" />
+                Testez Max gratuitement
               </div>
+
+              <div className="relative w-24 h-24 mx-auto mb-4">
+                <Image
+                  src={MAX_AVATAR_URL}
+                  alt="Max"
+                  width={96}
+                  height={96}
+                  className="rounded-full ring-4 ring-orange-100 shadow-lg"
+                  unoptimized
+                />
+                <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-500 rounded-full border-3 border-white flex items-center justify-center">
+                  <Sparkles className="w-3 h-3 text-white" />
+                </div>
+              </div>
+
+              <h2 className="text-xl font-bold text-zinc-900 mb-2">
+                Créez votre premier document
+              </h2>
+              <p className="text-zinc-500 text-sm">
+                Décrivez votre devis ou facture, Max s&apos;occupe du reste
+              </p>
+            </div>
+
+            <div className="bg-zinc-50 rounded-xl p-4 mb-6">
+              <p className="text-zinc-600 text-sm">
+                <span className="font-medium text-zinc-700">Exemple : </span>
+                &quot;Devis pour M. Dupont, rénovation salle de bain : dépose
+                carrelage 15m² à 25€/m², pose faïence 25m² à 85€/m², douche
+                italienne 1 550€&quot;
+              </p>
             </div>
 
             <div className="relative">
@@ -457,7 +531,7 @@ export default function OnboardingPage() {
                   Enregistrement en cours... Cliquez pour arrêter
                 </span>
               ) : (
-                "Dictez votre devis ou tapez Entrée pour envoyer"
+                "Dictez votre devis ou facture, puis tapez Entrée pour envoyer"
               )}
             </p>
           </motion.div>
@@ -551,19 +625,21 @@ export default function OnboardingPage() {
                   </div>
 
                   <div className="border-t border-zinc-100 pt-4">
-                    {generatedDocument?.lines?.slice(0, 3).map((line, i) => (
-                      <div
-                        key={i}
-                        className="flex justify-between py-2 border-b border-zinc-50"
-                      >
-                        <span className="text-zinc-700">
-                          {line.designation}
-                        </span>
-                        <span className="font-medium">
-                          {line.total_ttc?.toFixed(2)} €
-                        </span>
-                      </div>
-                    )) || (
+                    {generatedDocument?.sections?.[0]?.subsections?.[0]?.lines
+                      ?.slice(0, 3)
+                      .map((line, i) => (
+                        <div
+                          key={i}
+                          className="flex justify-between py-2 border-b border-zinc-50"
+                        >
+                          <span className="text-zinc-700">
+                            {line.designation}
+                          </span>
+                          <span className="font-medium">
+                            {line.total_ht?.toFixed(2)} €
+                          </span>
+                        </div>
+                      )) || (
                       <>
                         <div className="flex justify-between py-2 border-b border-zinc-50">
                           <span className="text-zinc-700">Ligne exemple 1</span>
@@ -614,7 +690,7 @@ export default function OnboardingPage() {
             key="signup"
             {...fadeInUp}
             transition={{ duration: 0.4 }}
-            className="bg-white rounded-2xl shadow-xl shadow-zinc-200/50 border border-zinc-100 p-8 md:p-10"
+            className="bg-white rounded-2xl shadow-xl shadow-zinc-200/50 border border-zinc-100 p-8 md:p-10 max-w-3xl w-full"
           >
             <div className="text-center mb-8">
               <div className="inline-flex items-center gap-2 px-4 py-2 bg-green-50 text-green-700 rounded-full text-sm font-medium mb-4">
@@ -631,7 +707,7 @@ export default function OnboardingPage() {
               </p>
             </div>
 
-            <form onSubmit={handleSignup} className="space-y-5">
+            <form onSubmit={handleSignup} className="space-y-6">
               {error && (
                 <div className="p-3 bg-red-50 border border-red-100 rounded-lg text-sm text-red-600">
                   {error}
@@ -744,97 +820,146 @@ export default function OnboardingPage() {
                 </div>
               </div>
 
-              <div className="bg-gradient-to-br from-primary/5 to-orange-50 rounded-xl p-5 border border-primary/10">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <p className="text-sm text-zinc-500">Votre offre</p>
-                    <p className="text-xl font-bold text-zinc-900">Plan Pro</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-3xl font-bold text-primary">29€</p>
-                    <p className="text-sm text-zinc-500">/mois</p>
-                  </div>
-                </div>
-
-                <div className="space-y-2 mb-4">
-                  <div className="flex items-center gap-2 text-sm text-zinc-600">
-                    <Check className="w-4 h-4 text-green-500" />
-                    <span>Devis et factures illimités</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm text-zinc-600">
-                    <Check className="w-4 h-4 text-green-500" />
-                    <span>Dictée vocale IA</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm text-zinc-600">
-                    <Check className="w-4 h-4 text-green-500" />
-                    <span>Export PDF professionnel</span>
+              <div className="pt-6 border-t border-zinc-100">
+                <div className="bg-green-50 rounded-xl p-5 mb-6 border border-green-200">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-11 h-11 rounded-full bg-green-100 flex items-center justify-center">
+                        <Check className="w-5 h-5 text-green-600" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-green-900">
+                          14 jours d&apos;essai gratuit
+                        </p>
+                        <p className="text-sm text-green-700">
+                          Aucun paiement requis pour commencer
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-3xl font-bold text-green-700">0€</p>
+                      <p className="text-xs text-green-600">aujourd&apos;hui</p>
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between pt-3 border-t border-primary/10">
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">
-                    <Sparkles className="w-3 h-3" />
-                    14 jours gratuits
+                <div className="flex flex-col items-center gap-3 mb-6">
+                  <p className="text-sm font-medium text-zinc-700">
+                    Choisissez votre formule
+                  </p>
+                  <div className="flex items-center gap-4">
+                    <span
+                      className={`text-sm font-medium transition-colors ${!isYearly ? "text-zinc-950" : "text-zinc-500"}`}
+                    >
+                      Mensuel
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsYearly(!isYearly)}
+                      className={`relative w-14 h-7 rounded-full transition-colors ${isYearly ? "bg-primary" : "bg-zinc-300"}`}
+                    >
+                      <span
+                        className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full transition-transform shadow-sm ${isYearly ? "translate-x-7" : "translate-x-0"}`}
+                      />
+                    </button>
+                    <span
+                      className={`text-sm font-medium transition-colors ${isYearly ? "text-zinc-950" : "text-zinc-500"}`}
+                    >
+                      Annuel
+                    </span>
                   </div>
-                  <Link
-                    href="/#pricing"
-                    className="text-xs text-primary hover:underline flex items-center gap-1"
-                  >
-                    Voir tous les plans
-                    <ExternalLink className="w-3 h-3" />
-                  </Link>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-zinc-100">
-                <div className="flex items-center gap-2 mb-4">
-                  <CreditCard className="w-5 h-5 text-zinc-400" />
-                  <span className="text-sm font-medium text-zinc-700">
-                    Informations de paiement
-                  </span>
-                  <span className="text-xs text-green-600 ml-auto font-medium">
-                    Aucun débit pendant 14 jours
-                  </span>
+                  <AnimatePresence>
+                    {isYearly && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -10, scale: 0.9 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -10, scale: 0.9 }}
+                        transition={{ duration: 0.2 }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-primary to-orange-500 text-white rounded-full text-sm font-medium shadow-lg shadow-primary/25"
+                      >
+                        <Sparkles className="w-4 h-4" />2 mois offerts
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
 
-                <div className="space-y-4">
-                  <div>
-                    <Input
-                      value={signupData.cardNumber}
-                      onChange={(e) =>
-                        setSignupData((prev) => ({
-                          ...prev,
-                          cardNumber: e.target.value,
-                        }))
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {pricingPlans.map((plan) => (
+                    <button
+                      key={plan.id}
+                      type="button"
+                      onClick={() =>
+                        setSelectedPlan(plan.id as "standard" | "pro")
                       }
-                      placeholder="1234 5678 9012 3456"
-                      className="h-11 font-mono"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <Input
-                      value={signupData.cardExpiry}
-                      onChange={(e) =>
-                        setSignupData((prev) => ({
-                          ...prev,
-                          cardExpiry: e.target.value,
-                        }))
-                      }
-                      placeholder="MM/AA"
-                      className="h-11 font-mono"
-                    />
-                    <Input
-                      value={signupData.cardCvc}
-                      onChange={(e) =>
-                        setSignupData((prev) => ({
-                          ...prev,
-                          cardCvc: e.target.value,
-                        }))
-                      }
-                      placeholder="CVC"
-                      className="h-11 font-mono"
-                    />
-                  </div>
+                      className={`relative text-left rounded-xl p-5 border-2 transition-all ${
+                        selectedPlan === plan.id
+                          ? "border-primary bg-primary/5 shadow-lg shadow-primary/10"
+                          : "border-zinc-200 bg-white hover:border-zinc-300"
+                      }`}
+                    >
+                      {plan.popular && (
+                        <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-primary text-white text-xs font-medium rounded-full">
+                          Le plus populaire
+                        </div>
+                      )}
+
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <h3 className="font-bold text-zinc-900">
+                            {plan.name}
+                          </h3>
+                          <p className="text-xs text-zinc-500">
+                            {plan.description}
+                          </p>
+                        </div>
+                        <div
+                          className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                            selectedPlan === plan.id
+                              ? "border-primary bg-primary"
+                              : "border-zinc-300"
+                          }`}
+                        >
+                          {selectedPlan === plan.id && (
+                            <Check className="w-3 h-3 text-white" />
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-baseline gap-1 mb-3">
+                        <span className="text-2xl font-bold text-zinc-900">
+                          {isYearly
+                            ? plan.yearlyMonthlyPrice
+                            : plan.monthlyPrice}
+                          €
+                        </span>
+                        <span className="text-sm text-zinc-500">HT /mois</span>
+                      </div>
+                      {isYearly && (
+                        <p className="text-xs text-zinc-500 mb-3">
+                          soit {plan.yearlyPrice}€ HT /an
+                        </p>
+                      )}
+
+                      <div className="space-y-2">
+                        {plan.features.map((feature) => (
+                          <div
+                            key={feature}
+                            className="flex items-center gap-2 text-xs text-zinc-600"
+                          >
+                            <Check className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
+                            <span>{feature}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="mt-3 pt-3 border-t border-zinc-100">
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                          <Sparkles className="w-3 h-3" />
+                          14 jours d&apos;essai gratuit
+                        </div>
+                      </div>
+                    </button>
+                  ))}
                 </div>
               </div>
 
@@ -862,8 +987,8 @@ export default function OnboardingPage() {
                   </>
                 ) : (
                   <>
-                    Créer mon compte
-                    <ArrowRight className="w-5 h-5 ml-2" />
+                    <CreditCard className="w-5 h-5 mr-2" />
+                    Procéder au paiement
                   </>
                 )}
               </Button>
@@ -962,5 +1087,19 @@ export default function OnboardingPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function OnboardingPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="w-full max-w-2xl mx-auto animate-pulse">
+          <div className="bg-white rounded-2xl shadow-xl border border-zinc-100 p-8 h-96" />
+        </div>
+      }
+    >
+      <OnboardingContent />
+    </Suspense>
   );
 }

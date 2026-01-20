@@ -39,7 +39,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Plus,
   Search,
-  FileText,
   ArrowUpDown,
   ArrowDown,
   ArrowUp,
@@ -408,7 +407,6 @@ export function DocumentsClient({ initialDocuments }: DocumentsClientProps) {
         <CardContent>
           {filteredAndSortedDocuments.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
-              <FileText className="h-10 w-10 text-muted-foreground mb-3" />
               <h3 className="font-semibold text-lg mb-2">Aucun document</h3>
               <p className="text-muted-foreground text-sm">
                 {searchQuery || filterType !== "all"
@@ -481,7 +479,7 @@ function DocumentCard({
   const formatDate = (date: Date) => {
     return date.toLocaleDateString("fr-FR", {
       day: "2-digit",
-      month: "short",
+      month: "2-digit",
       year: "numeric",
     });
   };
@@ -501,13 +499,10 @@ function DocumentCard({
     }
   };
 
-  // Couleur d'accent ou couleur par défaut selon le type
-  const accentColor = document.accentColor || (isDevis ? "#f97316" : "#f59e0b");
-
   return (
     <div
-      className={`relative flex flex-col rounded-xl border bg-card hover:shadow-lg transition-all cursor-pointer overflow-hidden ${
-        isSelected ? "ring-2 ring-destructive" : "hover:border-primary/50"
+      className={`group relative flex flex-col bg-card border border-border/60 hover:border-border hover:shadow-sm transition-all cursor-pointer overflow-hidden rounded-md ${
+        isSelected ? "ring-2 ring-destructive border-destructive" : ""
       }`}
       onClick={handleClick}
     >
@@ -523,152 +518,118 @@ function DocumentCard({
         </div>
       )}
 
-      {/* Document preview - Real content */}
-      <div className="p-2 sm:p-3 bg-muted/30">
-        <div className="bg-background rounded-lg p-2 sm:p-3 shadow-sm border">
-          {/* Header with logo and document info */}
-          <div className="flex justify-between items-start gap-2 mb-2">
+      {/* Document preview miniature */}
+      <div className="relative bg-muted/15 border-b border-border/40">
+        <div className="aspect-[210/115] p-2.5 flex flex-col">
+          {/* Mini document header */}
+          <div className="flex items-start justify-between gap-2 mb-1.5">
             {document.companyLogo ? (
               <Image
                 src={document.companyLogo}
                 alt="Logo"
-                width={40}
-                height={20}
-                className="w-8 sm:w-10 h-4 sm:h-5 object-contain object-left shrink-0"
+                width={36}
+                height={18}
+                className="w-9 h-[18px] object-contain object-left shrink-0"
                 unoptimized
               />
             ) : (
-              <div className="w-8 sm:w-10 h-4 sm:h-5 bg-muted rounded flex items-center justify-center shrink-0">
-                <Building2 className="w-2.5 sm:w-3 h-2.5 sm:h-3 text-muted-foreground/50" />
+              <div className="w-9 h-[18px] rounded bg-muted/50 flex items-center justify-center shrink-0">
+                <Building2 className="w-2.5 h-2.5 text-muted-foreground/50" />
               </div>
             )}
-            <div className="text-right min-w-0 flex-1">
-              <p
-                className="font-bold text-[8px] sm:text-[9px] leading-tight truncate"
-                style={{ color: accentColor }}
-              >
-                {isDevis ? "Devis" : "Facture"} n° {document.numero}
+            <div className="text-right">
+              <p className="text-[7px] font-semibold text-foreground/70 uppercase tracking-wide">
+                {isDevis ? "Devis" : "Facture"}
               </p>
-              <p className="text-[6px] sm:text-[7px] text-muted-foreground mt-0.5">
-                {formatDate(document.dateCreation)}
+              <p className="text-[6px] text-muted-foreground/60">
+                n° {document.numero}
               </p>
             </div>
           </div>
 
-          {/* Company and Client row */}
-          <div className="flex justify-between gap-2 text-[6px] sm:text-[7px] text-muted-foreground mb-2 pb-1.5 sm:pb-2 border-b border-dashed">
-            <p className="font-medium text-foreground truncate flex-1">
-              {document.companyName || "Mon entreprise"}
+          {/* Company & Client names */}
+          <div className="flex justify-between gap-2 mb-1.5">
+            <p className="text-[6px] font-medium text-foreground/60 truncate">
+              {document.companyName || "Entreprise"}
             </p>
-            <p className="font-medium text-foreground truncate flex-1 text-right">
+            <p className="text-[6px] font-medium text-foreground/60 truncate">
               {document.clientNom}
             </p>
           </div>
 
-          {/* Project title */}
-          <p className="font-semibold truncate mb-2 text-[8px] sm:text-[9px]">
-            {document.projectTitle || "Sans titre"}
-          </p>
-
-          {/* Mini table */}
-          <div className="border rounded overflow-hidden mb-2">
-            {/* Table header */}
-            <div
-              className="px-1 sm:px-1.5 py-0.5 sm:py-1"
-              style={{ backgroundColor: accentColor + "15" }}
-            >
-              <div
-                className="flex gap-1 text-[6px] sm:text-[7px] font-semibold"
-                style={{ color: accentColor }}
-              >
-                <span className="w-3 sm:w-4 text-center shrink-0">#</span>
-                <span className="flex-1 truncate">Désignation</span>
-                <span className="w-8 sm:w-10 text-right shrink-0">Total</span>
-              </div>
+          {/* Skeleton table */}
+          <div className="flex-1 space-y-1">
+            <div className="flex items-center gap-1.5 py-0.5 border-b border-muted/30">
+              <div className="w-3 h-1 rounded bg-muted/40" />
+              <div className="flex-1 h-1 rounded bg-muted/30" />
+              <div className="w-5 h-1 rounded bg-muted/40" />
             </div>
-            {/* Table rows - simulated content */}
-            <div className="divide-y divide-border/50">
-              <div className="flex gap-1 px-1 sm:px-1.5 py-0.5 sm:py-1 items-center">
-                <span className="w-3 sm:w-4 text-center text-[6px] sm:text-[7px] text-muted-foreground shrink-0">
-                  1
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className="h-1 sm:h-1.5 w-full rounded bg-muted/80" />
-                  <div className="h-0.5 sm:h-1 w-2/3 rounded bg-muted/40 mt-0.5" />
-                </div>
-                <div className="h-1 sm:h-1.5 w-8 sm:w-10 rounded bg-muted/60 shrink-0" />
-              </div>
-              <div className="flex gap-1 px-1 sm:px-1.5 py-0.5 sm:py-1 items-center">
-                <span className="w-3 sm:w-4 text-center text-[6px] sm:text-[7px] text-muted-foreground shrink-0">
-                  2
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className="h-1 sm:h-1.5 w-4/5 rounded bg-muted/60" />
-                  <div className="h-0.5 sm:h-1 w-1/2 rounded bg-muted/30 mt-0.5" />
-                </div>
-                <div className="h-1 sm:h-1.5 w-8 sm:w-10 rounded bg-muted/40 shrink-0" />
-              </div>
+            <div className="flex items-center gap-1.5 py-0.5">
+              <div className="w-3 h-0.5 rounded bg-muted/25" />
+              <div className="flex-1 h-0.5 rounded bg-muted/20" />
+              <div className="w-5 h-0.5 rounded bg-muted/25" />
+            </div>
+            <div className="flex items-center gap-1.5 py-0.5">
+              <div className="w-3 h-0.5 rounded bg-muted/25" />
+              <div className="flex-1 h-0.5 rounded bg-muted/20" />
+              <div className="w-5 h-0.5 rounded bg-muted/25" />
             </div>
           </div>
 
-          {/* Totals section */}
-          <div className="flex justify-end">
-            <div className="text-[6px] sm:text-[7px] space-y-0.5 w-16 sm:w-20">
-              <div className="flex justify-between items-center text-muted-foreground gap-1">
-                <span className="shrink-0">Total HT</span>
-                <div className="h-1 sm:h-1.5 w-6 sm:w-8 rounded bg-muted/50" />
-              </div>
-              <div className="flex justify-between items-center text-muted-foreground gap-1">
-                <span className="shrink-0">TVA</span>
-                <div className="h-1 sm:h-1.5 w-5 sm:w-6 rounded bg-muted/40" />
-              </div>
-              <div className="flex justify-between items-center font-bold pt-0.5 border-t gap-1">
-                <span className="shrink-0">TTC</span>
-                <span
-                  className="truncate text-right"
-                  style={{ color: accentColor }}
-                >
-                  {formatCurrency(document.totalTTC).replace("€", "").trim()} €
-                </span>
-              </div>
+          {/* Mini total */}
+          <div className="mt-auto pt-1 border-t border-muted/30 flex justify-end">
+            <div className="text-right">
+              <p className="text-[5px] text-muted-foreground/50 uppercase">
+                Total TTC
+              </p>
+              <p className="text-[8px] font-bold text-foreground/80">
+                {formatCurrency(document.totalTTC)}
+              </p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Document info footer */}
-      <div className="p-3 space-y-2">
-        {/* Type badge with number */}
+      {/* Document info - clean and minimal */}
+      <div className="p-2.5 space-y-1.5">
+        {/* Header row: Type badge + Number */}
         <div className="flex items-center justify-between gap-2">
           <span
-            className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] sm:text-xs font-medium shrink-0"
-            style={{
-              backgroundColor: accentColor + "20",
-              color: accentColor,
-            }}
+            className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
+              !document.accentColor ? "bg-muted text-muted-foreground" : ""
+            }`}
+            style={
+              document.accentColor
+                ? {
+                    backgroundColor: `${document.accentColor}15`,
+                    color: document.accentColor,
+                  }
+                : undefined
+            }
           >
             {isDevis ? "Devis" : "Facture"}
           </span>
-          <span
-            className="text-[11px] sm:text-xs font-semibold truncate"
-            style={{ color: accentColor }}
-          >
-            n° {document.numero}
+          <span className="text-xs font-mono text-muted-foreground">
+            {document.numero}
           </span>
         </div>
 
-        {/* Client name and date */}
-        <div className="flex items-center justify-between gap-2 text-[11px] sm:text-xs text-muted-foreground">
-          <p className="truncate flex-1">{document.clientNom}</p>
-          <span className="shrink-0">{formatDate(document.dateCreation)}</span>
-        </div>
+        {/* Client name */}
+        <p className="text-sm font-medium text-foreground truncate leading-tight">
+          {document.clientNom}
+        </p>
 
-        {/* Amount */}
-        <div className="flex items-baseline justify-between pt-2 border-t gap-2">
-          <span className="text-[10px] sm:text-xs text-muted-foreground shrink-0">
-            Total TTC
+        {/* Project title */}
+        <p className="text-xs text-muted-foreground truncate leading-tight">
+          {document.projectTitle || "Sans titre"}
+        </p>
+
+        {/* Footer: Date + Amount */}
+        <div className="flex items-end justify-between gap-2">
+          <span className="text-[11px] text-muted-foreground tabular-nums">
+            {formatDate(document.dateCreation)}
           </span>
-          <span className="font-bold text-base sm:text-lg truncate">
+          <span className="text-sm font-semibold text-foreground tabular-nums">
             {formatCurrency(document.totalTTC)}
           </span>
         </div>

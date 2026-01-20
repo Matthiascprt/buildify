@@ -43,8 +43,8 @@ export default async function DocumentsPage() {
     numero: q.number,
     type: "devis" as DocumentType,
     clientNom: q.client_id
-      ? clientMap.get(q.client_id) || "Client inconnu"
-      : "Sans client",
+      ? clientMap.get(q.client_id) || "Client non défini"
+      : "Client non défini",
     dateCreation: new Date(q.created_at),
     totalTTC: q.content?.totals?.total_ttc || 0,
     projectTitle: q.content?.project_title,
@@ -59,8 +59,8 @@ export default async function DocumentsPage() {
     numero: i.number,
     type: "facture" as DocumentType,
     clientNom: i.client_id
-      ? clientMap.get(i.client_id) || "Client inconnu"
-      : "Sans client",
+      ? clientMap.get(i.client_id) || "Client non défini"
+      : "Client non défini",
     dateCreation: new Date(i.created_at),
     totalTTC: i.content?.totals?.total_ttc || 0,
     projectTitle: i.content?.project_title,

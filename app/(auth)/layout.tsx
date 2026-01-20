@@ -13,11 +13,11 @@ export default function AuthLayout({
         <header className="h-16 border-b border-zinc-200 flex items-center px-4 lg:px-8">
           <Link href="/" className="flex items-center gap-2 font-bold text-xl">
             <Image
-              src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/buildify-assets/Logo/icon (1).svg`}
+              src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/buildify-assets/Logo/Logo02.svg`}
               alt="Buildify"
               width={32}
               height={32}
-              className="flex-shrink-0"
+              className="flex-shrink-0 drop-shadow-sm"
               unoptimized
             />
             Buildify

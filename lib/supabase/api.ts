@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "./server";
+import { incrementDocumentUsage } from "./subscription";
 import type {
   Profile,
   Company,
@@ -558,7 +559,7 @@ export async function getLogoUploadInfo(): Promise<{
 function createEmptyContent(): DocumentContent {
   return {
     project_title: "",
-    lines: [],
+    sections: [],
     totals: {
       total_ht: 0,
       total_vat: 0,
@@ -698,6 +699,8 @@ export async function createQuote(
     console.error("[DEBUG] Error creating quote:", error);
     return { success: false, error: error.message };
   }
+
+  await incrementDocumentUsage();
 
   console.log("[DEBUG] createQuote - Success! Quote ID:", data?.id);
   return { success: true, quote: data };
@@ -865,6 +868,8 @@ export async function createInvoice(
     console.error("[DEBUG] Error creating invoice:", error);
     return { success: false, error: error.message };
   }
+
+  await incrementDocumentUsage();
 
   console.log("[DEBUG] createInvoice - Success! Invoice ID:", data?.id);
   return { success: true, invoice: data };

@@ -47,7 +47,6 @@ import {
 import {
   Plus,
   Search,
-  Users,
   Mail,
   Phone,
   Loader2,
@@ -773,7 +772,6 @@ export default function ClientsPage() {
         <CardContent>
           {clients.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
-              <Users className="h-12 w-12 text-muted-foreground mb-4" />
               <h3 className="font-semibold text-lg mb-2">Aucun client</h3>
               <p className="text-muted-foreground text-sm mb-4">
                 Ajoutez votre premier client ou créez un document pour en
@@ -782,7 +780,6 @@ export default function ClientsPage() {
             </div>
           ) : filteredAndSortedClients.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
-              <Search className="h-12 w-12 text-muted-foreground mb-4" />
               <h3 className="font-semibold text-lg mb-2">Aucun résultat</h3>
               <p className="text-muted-foreground text-sm">
                 Aucun client ne correspond à vos critères de recherche.

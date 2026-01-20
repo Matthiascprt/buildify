@@ -3,17 +3,24 @@
 import { useState, useRef, useEffect } from "react";
 import {
   FileText,
+  FileSpreadsheet,
+  FileCode,
   Download,
   User,
   Trash2,
   Receipt,
   Loader2,
-  Plus,
   Minus,
   Palette,
   AlertTriangle,
   MessageSquare,
   PenLine,
+  X,
+  Layers,
+  LayoutList,
+  ListPlus,
+  UserPlus,
+  Plus,
 } from "lucide-react";
 import { HexColorPicker } from "react-colorful";
 import { pdf } from "@react-pdf/renderer";
@@ -31,6 +38,11 @@ import {
 } from "@/components/ui/select";
 import { QuotePDFTemplate } from "./quote-pdf-template";
 import { InvoicePDFTemplate } from "./invoice-pdf-template";
+import { generateFacturXXml, downloadXml } from "@/lib/facturx/generate-xml";
+import { createFacturXPdf } from "@/lib/facturx/embed-xml";
+import { downloadExcel } from "@/lib/export/excel";
+
+type DownloadFormat = "pdf" | "facturx" | "xml" | "excel";
 import {
   Dialog,
   DialogContent,
@@ -42,6 +54,8 @@ import {
 import { QuoteTemplate } from "./quote-template";
 import { InvoiceTemplate } from "./invoice-template";
 import { SignatureModal } from "./signature-modal";
+import { ClientPickerModal } from "./client-picker-modal";
+import { NewClientModal } from "./new-client-modal";
 import { ClientDocuments } from "@/components/clients/client-documents";
 import { updateClient, deleteClient } from "@/lib/supabase/api";
 import type {
@@ -53,13 +67,24 @@ import type { Client } from "@/lib/supabase/types";
 
 type ClientType = "particulier" | "professionnel";
 
+// Type pour les éléments sélectionnés (sections, sous-sections, lignes)
+type SelectedItem = {
+  type: "section" | "subsection" | "line";
+  id: string;
+  sectionId?: string;
+  subsectionId?: string;
+};
+
 interface DocumentPreviewProps {
   document: DocumentData | null;
   onDeleteDocument?: () => Promise<{ success: boolean; error?: string }>;
   onDocumentUpdate?: (path: string, value: string | number) => void;
+  onDocumentChange?: (document: DocumentData) => void;
   onConvertToInvoice?: () => Promise<{ success: boolean; error?: string }>;
-  onAddLine?: () => void;
-  onRemoveLines?: (lineIndices: number[]) => void;
+  onAddSection?: () => void;
+  onAddSubsection?: (sectionId?: string) => void;
+  onAddLine?: (subsectionId?: string) => void;
+  onRemoveItems?: (items: SelectedItem[]) => void;
   accentColor?: string | null;
   onAccentColorChange?: (color: string | null) => void;
   clientSyncError?: string | null;
@@ -68,6 +93,8 @@ interface DocumentPreviewProps {
   showMobileInput?: boolean;
   mobileInputComponent?: React.ReactNode;
   onSwitchToChat?: () => void;
+  clients?: Client[];
+  onClientCreated?: (client: Client) => void;
 }
 
 function mapToQuoteTemplateData(doc: QuoteData) {
@@ -82,6 +109,7 @@ function mapToQuoteTemplateData(doc: QuoteData) {
       phone: doc.company.phone,
       email: doc.company.email,
       siret: doc.company.siret,
+      rcs: doc.company.rcs,
       logoUrl: doc.company.logoUrl,
       paymentTerms: doc.company.paymentTerms,
       legalNotice: doc.company.legalNotice,
@@ -95,7 +123,7 @@ function mapToQuoteTemplateData(doc: QuoteData) {
       siret: doc.client.siret,
     },
     projectTitle: doc.projectTitle,
-    items: doc.items,
+    sections: doc.sections,
     totalHT: doc.totalHT,
     tvaRate: doc.tvaRate,
     tvaAmount: doc.tvaAmount,
@@ -117,6 +145,7 @@ function mapToInvoiceTemplateData(doc: InvoiceData) {
       phone: doc.company.phone,
       email: doc.company.email,
       siret: doc.company.siret,
+      rcs: doc.company.rcs,
       logoUrl: doc.company.logoUrl,
       paymentTerms: doc.company.paymentTerms,
       legalNotice: doc.company.legalNotice,
@@ -130,7 +159,7 @@ function mapToInvoiceTemplateData(doc: InvoiceData) {
       siret: doc.client.siret,
     },
     projectTitle: doc.projectTitle,
-    items: doc.items,
+    sections: doc.sections,
     totalHT: doc.totalHT,
     tvaRate: doc.tvaRate,
     tvaAmount: doc.tvaAmount,
@@ -144,9 +173,12 @@ export function DocumentPreview({
   document,
   onDeleteDocument,
   onDocumentUpdate,
+  onDocumentChange,
   onConvertToInvoice,
+  onAddSection,
+  onAddSubsection,
   onAddLine,
-  onRemoveLines,
+  onRemoveItems,
   accentColor,
   onAccentColorChange,
   clientSyncError,
@@ -155,15 +187,16 @@ export function DocumentPreview({
   showMobileInput,
   mobileInputComponent,
   onSwitchToChat,
+  clients = [],
+  onClientCreated,
 }: DocumentPreviewProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showConvertConfirm, setShowConvertConfirm] = useState(false);
   const [isConverting, setIsConverting] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
-  const [deleteLineMode, setDeleteLineMode] = useState(false);
-  const [selectedLines, setSelectedLines] = useState<Set<number>>(new Set());
-  const [isDragging, setIsDragging] = useState(false);
+  const [deleteMode, setDeleteMode] = useState(false);
+  const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showClientSheet, setShowClientSheet] = useState(false);
   const [clientData, setClientData] = useState<Client | null>(null);
@@ -178,8 +211,18 @@ export function DocumentPreview({
   });
   const [clientEditError, setClientEditError] = useState<string | null>(null);
   const [showSignatureModal, setShowSignatureModal] = useState(false);
+  const [showClientMenu, setShowClientMenu] = useState(false);
+  const [showDownloadMenu, setShowDownloadMenu] = useState(false);
+  const [showClientPicker, setShowClientPicker] = useState(false);
+  const [showNewClientModal, setShowNewClientModal] = useState(false);
+  const [popoverPosition, setPopoverPosition] = useState({ left: 0, top: 0 });
   const documentRef = useRef<HTMLDivElement>(null);
-  const colorPickerRef = useRef<HTMLDivElement>(null);
+  const colorButtonRef = useRef<HTMLButtonElement>(null);
+  const colorPopoverRef = useRef<HTMLDivElement>(null);
+  const clientButtonRef = useRef<HTMLButtonElement>(null);
+  const clientMenuRef = useRef<HTMLDivElement>(null);
+  const downloadButtonRef = useRef<HTMLButtonElement>(null);
+  const downloadMenuRef = useRef<HTMLDivElement>(null);
 
   const handleClientButtonClick = async () => {
     if (!document?.client?.id) return;
@@ -246,10 +289,11 @@ export function DocumentPreview({
   // Fermer le color picker quand on clique en dehors
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (
-        colorPickerRef.current &&
-        !colorPickerRef.current.contains(event.target as Node)
-      ) {
+      const target = event.target as Node;
+      const clickedOnButton = colorButtonRef.current?.contains(target);
+      const clickedOnPopover = colorPopoverRef.current?.contains(target);
+
+      if (!clickedOnButton && !clickedOnPopover) {
         setShowColorPicker(false);
       }
     };
@@ -259,76 +303,254 @@ export function DocumentPreview({
     return () => window.removeEventListener("mousedown", handleClickOutside);
   }, [showColorPicker]);
 
-  // Drag-select pour suppression multiple
-  const dragStartLineRef = useRef<number | null>(null);
-
-  const handleLineMouseDown = (lineIndex: number) => {
-    if (deleteLineMode) {
-      dragStartLineRef.current = lineIndex;
-      setIsDragging(false); // Will be set to true only if mouse moves to another line
-    }
-  };
-
-  const handleLineMouseEnter = (lineIndex: number) => {
-    if (
-      deleteLineMode &&
-      dragStartLineRef.current !== null &&
-      dragStartLineRef.current !== lineIndex
-    ) {
-      // Started dragging to another line
-      if (!isDragging) {
-        setIsDragging(true);
-        setSelectedLines(new Set([dragStartLineRef.current, lineIndex]));
-      } else {
-        setSelectedLines((prev) => new Set([...prev, lineIndex]));
-      }
-    }
-  };
-
-  const handleLineClick = (lineIndex: number) => {
-    if (deleteLineMode) {
-      // Click simple - sélectionner/désélectionner
-      setSelectedLines((prev) => {
-        const newSet = new Set(prev);
-        if (newSet.has(lineIndex)) {
-          newSet.delete(lineIndex);
-        } else {
-          newSet.add(lineIndex);
-        }
-        return newSet;
-      });
-    }
-  };
-
-  // Gérer le mouseup global pour terminer le drag
+  // Fermer le menu client quand on clique en dehors
   useEffect(() => {
-    const handleMouseUp = () => {
-      dragStartLineRef.current = null;
-      if (isDragging) {
-        setIsDragging(false);
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      const clickedOnButton = clientButtonRef.current?.contains(target);
+      const clickedOnMenu = clientMenuRef.current?.contains(target);
+
+      if (!clickedOnButton && !clickedOnMenu) {
+        setShowClientMenu(false);
       }
     };
-
-    if (deleteLineMode) {
-      window.addEventListener("mouseup", handleMouseUp);
+    if (showClientMenu) {
+      window.addEventListener("mousedown", handleClickOutside);
     }
-    return () => window.removeEventListener("mouseup", handleMouseUp);
-  }, [deleteLineMode, isDragging]);
+    return () => window.removeEventListener("mousedown", handleClickOutside);
+  }, [showClientMenu]);
+
+  // Fermer le menu téléchargement quand on clique en dehors
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      const clickedOnButton = downloadButtonRef.current?.contains(target);
+      const clickedOnMenu = downloadMenuRef.current?.contains(target);
+
+      if (!clickedOnButton && !clickedOnMenu) {
+        setShowDownloadMenu(false);
+      }
+    };
+    if (showDownloadMenu) {
+      window.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => window.removeEventListener("mousedown", handleClickOutside);
+  }, [showDownloadMenu]);
+
+  // Gérer la sélection d'un client existant
+  const handleClientSelect = async (client: Client) => {
+    if (!document || !onDocumentChange) return;
+
+    const clientName = [client.first_name, client.last_name]
+      .filter(Boolean)
+      .join(" ");
+
+    // Update document with client info
+    const updatedDocument: DocumentData = {
+      ...document,
+      client: {
+        id: client.id,
+        name: clientName,
+        address: "",
+        city: "",
+        phone: client.phone || "",
+        email: client.email || "",
+      },
+    };
+
+    // Update client_id in database if document has an ID
+    if (document.id) {
+      const type = document.type === "quote" ? "quote" : "invoice";
+      try {
+        await fetch(`/api/documents?id=${document.id}&type=${type}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ client_id: client.id }),
+        });
+      } catch (error) {
+        console.error("Failed to update client:", error);
+      }
+    }
+
+    onDocumentChange(updatedDocument);
+    setShowClientPicker(false);
+  };
+
+  // Gérer la création d'un nouveau client
+  const handleNewClientCreated = (client: Client) => {
+    onClientCreated?.(client);
+    handleClientSelect(client);
+    setShowNewClientModal(false);
+  };
+
+  // Vérifier si un élément est sélectionné
+  const isItemSelected = (
+    type: "section" | "subsection" | "line",
+    id: string,
+  ) => {
+    return selectedItems.some((item) => item.type === type && item.id === id);
+  };
+
+  // Toggle la sélection d'un élément
+  const toggleItemSelection = (item: SelectedItem) => {
+    if (!deleteMode) return;
+
+    setSelectedItems((prev) => {
+      const exists = prev.some((i) => i.type === item.type && i.id === item.id);
+      if (exists) {
+        return prev.filter((i) => !(i.type === item.type && i.id === item.id));
+      }
+      return [...prev, item];
+    });
+  };
+
+  // Handlers pour les clics sur les éléments en mode suppression
+  const handleSectionClick = (sectionId: string) => {
+    if (!deleteMode || !document) return;
+
+    const section = document.sections.find((s) => s.sectionId === sectionId);
+    if (!section) return;
+
+    const isSelected = isItemSelected("section", sectionId);
+
+    setSelectedItems((prev) => {
+      if (isSelected) {
+        const subsectionIds = section.subsections.map(
+          (sub) => sub.subsectionId,
+        );
+        const lineIds = section.subsections.flatMap((sub) =>
+          sub.lines.map((line) => line.lineId),
+        );
+
+        return prev.filter((item) => {
+          if (item.type === "section" && item.id === sectionId) return false;
+          if (item.type === "subsection" && subsectionIds.includes(item.id))
+            return false;
+          if (item.type === "line" && lineIds.includes(item.id)) return false;
+          return true;
+        });
+      } else {
+        const itemsToAdd: SelectedItem[] = [{ type: "section", id: sectionId }];
+
+        for (const sub of section.subsections) {
+          itemsToAdd.push({
+            type: "subsection",
+            id: sub.subsectionId,
+            sectionId,
+          });
+
+          for (const line of sub.lines) {
+            itemsToAdd.push({
+              type: "line",
+              id: line.lineId,
+              subsectionId: sub.subsectionId,
+              sectionId,
+            });
+          }
+        }
+
+        const existingIds = new Set(
+          prev.map((item) => `${item.type}-${item.id}`),
+        );
+        const newItems = itemsToAdd.filter(
+          (item) => !existingIds.has(`${item.type}-${item.id}`),
+        );
+
+        return [...prev, ...newItems];
+      }
+    });
+  };
+
+  const handleSubsectionClick = (subsectionId: string, sectionId: string) => {
+    if (!deleteMode || !document) return;
+
+    const section = document.sections.find((s) => s.sectionId === sectionId);
+    const subsection = section?.subsections.find(
+      (sub) => sub.subsectionId === subsectionId,
+    );
+    if (!subsection) return;
+
+    const isSelected = isItemSelected("subsection", subsectionId);
+
+    setSelectedItems((prev) => {
+      if (isSelected) {
+        const lineIds = subsection.lines.map((line) => line.lineId);
+
+        return prev.filter((item) => {
+          if (item.type === "subsection" && item.id === subsectionId)
+            return false;
+          if (item.type === "line" && lineIds.includes(item.id)) return false;
+          return true;
+        });
+      } else {
+        const itemsToAdd: SelectedItem[] = [
+          { type: "subsection", id: subsectionId, sectionId },
+        ];
+
+        for (const line of subsection.lines) {
+          itemsToAdd.push({
+            type: "line",
+            id: line.lineId,
+            subsectionId,
+            sectionId,
+          });
+        }
+
+        const existingIds = new Set(
+          prev.map((item) => `${item.type}-${item.id}`),
+        );
+        const newItems = itemsToAdd.filter(
+          (item) => !existingIds.has(`${item.type}-${item.id}`),
+        );
+
+        return [...prev, ...newItems];
+      }
+    });
+  };
+
+  const handleLineClick = (
+    lineId: string,
+    subsectionId: string,
+    sectionId: string,
+  ) => {
+    toggleItemSelection({
+      type: "line",
+      id: lineId,
+      subsectionId,
+      sectionId,
+    });
+  };
 
   // Reset la sélection quand on quitte le mode suppression
   useEffect(() => {
-    if (!deleteLineMode) {
-      setSelectedLines(new Set());
-      setIsDragging(false);
+    if (!deleteMode) {
+      setSelectedItems([]);
     }
-  }, [deleteLineMode]);
+  }, [deleteMode]);
 
-  const handleConfirmDeleteLines = () => {
-    if (selectedLines.size > 0 && onRemoveLines) {
-      onRemoveLines(Array.from(selectedLines));
-      setSelectedLines(new Set());
-      setDeleteLineMode(false);
+  // Confirmer la suppression des éléments sélectionnés
+  const handleConfirmDeleteItems = () => {
+    if (selectedItems.length > 0 && onRemoveItems) {
+      onRemoveItems(selectedItems);
+      setSelectedItems([]);
+      setDeleteMode(false);
     }
+  };
+
+  // Compter les éléments sélectionnés par type
+  const getSelectionSummary = () => {
+    const sections = selectedItems.filter((i) => i.type === "section").length;
+    const subsections = selectedItems.filter(
+      (i) => i.type === "subsection",
+    ).length;
+    const lines = selectedItems.filter((i) => i.type === "line").length;
+    const parts = [];
+    if (sections > 0)
+      parts.push(`${sections} section${sections > 1 ? "s" : ""}`);
+    if (subsections > 0)
+      parts.push(`${subsections} sous-section${subsections > 1 ? "s" : ""}`);
+    if (lines > 0) parts.push(`${lines} ligne${lines > 1 ? "s" : ""}`);
+    return parts.join(", ");
   };
 
   const handleDeleteClick = () => {
@@ -366,12 +588,19 @@ export function DocumentPreview({
     }
   };
 
-  const handleDownloadPDF = async () => {
+  const handleDownload = async (format: DownloadFormat) => {
     if (!document) return;
 
+    setShowDownloadMenu(false);
     setIsGeneratingPDF(true);
 
     try {
+      const isInvoice = document.type === "invoice";
+      const baseFileName = isInvoice
+        ? `Facture_${document.number}`
+        : `Devis_${document.number}`;
+
+      // Generate PDF document component
       const pdfDocument =
         document.type === "quote" ? (
           <QuotePDFTemplate
@@ -386,224 +615,419 @@ export function DocumentPreview({
           />
         );
 
-      const blob = await pdf(pdfDocument).toBlob();
+      switch (format) {
+        case "pdf": {
+          // Standard PDF download
+          const blob = await pdf(pdfDocument).toBlob();
+          const url = URL.createObjectURL(blob);
+          const link = window.document.createElement("a");
+          link.href = url;
+          link.download = `${baseFileName}.pdf`;
+          window.document.body.appendChild(link);
+          link.click();
+          window.document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+          break;
+        }
 
-      const fileName =
-        document.type === "quote"
-          ? `Devis_${document.number}.pdf`
-          : `Facture_${document.number}.pdf`;
+        case "facturx": {
+          // Factur-X PDF (PDF with embedded XML) - only for invoices
+          if (!isInvoice) {
+            // Fallback to standard PDF for quotes
+            const blob = await pdf(pdfDocument).toBlob();
+            const url = URL.createObjectURL(blob);
+            const link = window.document.createElement("a");
+            link.href = url;
+            link.download = `${baseFileName}.pdf`;
+            window.document.body.appendChild(link);
+            link.click();
+            window.document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+          } else {
+            const pdfBlob = await pdf(pdfDocument).toBlob();
+            const xmlContent = generateFacturXXml(
+              mapToInvoiceTemplateData(document),
+            );
+            const facturxBlob = await createFacturXPdf(pdfBlob, xmlContent);
+            const url = URL.createObjectURL(facturxBlob);
+            const link = window.document.createElement("a");
+            link.href = url;
+            link.download = `${baseFileName}_facturx.pdf`;
+            window.document.body.appendChild(link);
+            link.click();
+            window.document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+          }
+          break;
+        }
 
-      const url = URL.createObjectURL(blob);
-      const link = window.document.createElement("a");
-      link.href = url;
-      link.download = fileName;
-      window.document.body.appendChild(link);
-      link.click();
-      window.document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+        case "xml": {
+          // XML download - only for invoices
+          if (isInvoice) {
+            downloadXml(mapToInvoiceTemplateData(document));
+          }
+          break;
+        }
+
+        case "excel": {
+          // Excel download
+          downloadExcel(document);
+          break;
+        }
+      }
     } catch (error) {
-      console.error("Error generating PDF:", error);
+      console.error("Error generating document:", error);
     } finally {
       setIsGeneratingPDF(false);
     }
   };
 
-  const getDescription = () => {
-    if (!document) {
-      return "Votre devis ou facture apparaîtra ici";
-    }
-    if (document.type === "quote") {
-      return `Aperçu du devis n°${document.number}`;
-    }
-    return `Aperçu de la facture n°${document.number}`;
-  };
-
   return (
     <div className="h-full flex flex-col bg-muted/30">
-      <div className="border-b px-4 py-3 shrink-0">
-        {/* Desktop: single row | Mobile: stacked */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          {/* Title section */}
-          <div className="min-w-0">
-            <h2 className="font-semibold">Aperçu du document</h2>
-            <div className="flex items-center gap-2">
-              <p className="text-sm text-muted-foreground truncate">
-                {getDescription()}
-              </p>
-              {isSaving && (
-                <span className="text-xs text-muted-foreground flex items-center gap-1 shrink-0">
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                  Sauvegarde...
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Actions - right side on desktop, below on mobile */}
-          {document && (
-            <div className="flex flex-wrap items-center gap-1.5 shrink-0">
-              {/* Switch to chat button - visible on screens smaller than 2xl */}
-              {onSwitchToChat && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="2xl:hidden h-8 w-8 rounded-full bg-muted hover:bg-muted/80"
-                  onClick={onSwitchToChat}
-                  title="Voir la conversation"
-                  data-tour-id="tour-switch-chat-button"
+      {/* Google Docs style toolbar */}
+      {document && (
+        <div className="relative border-b bg-background shrink-0">
+          <div className="flex items-center flex-wrap min-h-12 py-1.5 px-2 gap-1">
+            {/* Left group: Add elements - inline buttons */}
+            <div
+              className="flex items-center gap-1"
+              data-tour-id="tour-add-elements"
+            >
+              {onAddSection && (
+                <button
+                  className="flex items-center justify-center h-9 w-9 rounded hover:bg-muted transition-colors"
+                  onClick={onAddSection}
+                  title="Ajouter une section"
                 >
-                  <MessageSquare className="h-4 w-4 text-muted-foreground" />
-                </Button>
+                  <Layers className="h-5 w-5" />
+                </button>
+              )}
+              {onAddSubsection && (
+                <button
+                  className="flex items-center justify-center h-9 w-9 rounded hover:bg-muted transition-colors"
+                  onClick={() => onAddSubsection()}
+                  title="Ajouter une sous-section"
+                >
+                  <LayoutList className="h-5 w-5" />
+                </button>
               )}
               {onAddLine && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 rounded-full bg-muted hover:bg-muted/80"
-                  onClick={onAddLine}
+                <button
+                  className="flex items-center justify-center h-9 w-9 rounded hover:bg-muted transition-colors"
+                  onClick={() => onAddLine()}
                   title="Ajouter une ligne"
-                  data-tour-id="tour-add-line-button"
                 >
-                  <Plus className="h-4 w-4 text-muted-foreground" />
-                </Button>
+                  <ListPlus className="h-5 w-5" />
+                </button>
               )}
-              {onRemoveLines && (
-                <div className="flex items-center gap-1">
-                  {deleteLineMode && selectedLines.size > 0 && (
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      className="h-8 px-3 rounded-full text-xs animate-in fade-in slide-in-from-right-2 duration-200"
-                      onClick={handleConfirmDeleteLines}
-                    >
-                      Supprimer {selectedLines.size}
-                    </Button>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className={`h-8 w-8 rounded-full transition-all ${deleteLineMode ? "bg-destructive/20 hover:bg-destructive/30" : "bg-muted hover:bg-muted/80"}`}
-                    onClick={() => setDeleteLineMode(!deleteLineMode)}
-                    title={
-                      deleteLineMode
-                        ? "Annuler la suppression"
-                        : "Supprimer des lignes"
-                    }
-                    data-tour-id="tour-remove-line-button"
+            </div>
+
+            {/* Delete mode button */}
+            {onRemoveItems && (
+              <>
+                <button
+                  className={`flex items-center gap-1.5 h-9 px-2.5 rounded transition-colors ${
+                    deleteMode
+                      ? "bg-destructive/10 text-destructive"
+                      : "hover:bg-muted"
+                  }`}
+                  onClick={() => setDeleteMode(!deleteMode)}
+                  title={
+                    deleteMode
+                      ? "Annuler la sélection"
+                      : "Supprimer des éléments"
+                  }
+                  data-tour-id="tour-remove-button"
+                >
+                  <Minus className="h-5 w-5" />
+                  {deleteMode && <X className="h-3.5 w-3.5" />}
+                </button>
+
+                {/* Confirmation button when items selected */}
+                {deleteMode && selectedItems.length > 0 && (
+                  <button
+                    className="flex items-center h-7 px-2.5 ml-1 rounded bg-destructive text-destructive-foreground text-xs font-medium hover:bg-destructive/90 transition-colors animate-in fade-in slide-in-from-left-2 duration-200"
+                    onClick={handleConfirmDeleteItems}
                   >
-                    <Minus
-                      className={`h-4 w-4 ${deleteLineMode ? "text-destructive" : "text-muted-foreground"}`}
-                    />
-                  </Button>
-                </div>
-              )}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 rounded-full bg-muted hover:bg-muted/80"
-                onClick={handleDownloadPDF}
-                disabled={isGeneratingPDF}
-                data-tour-id="tour-download-button"
-              >
-                {isGeneratingPDF ? (
-                  <Loader2 className="h-4 w-4 text-muted-foreground animate-spin" />
-                ) : (
-                  <Download className="h-4 w-4 text-muted-foreground" />
+                    Supprimer ({getSelectionSummary()})
+                  </button>
                 )}
-              </Button>
-              <div className="relative" ref={colorPickerRef}>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 rounded-full bg-muted hover:bg-muted/80"
-                  onClick={() => setShowColorPicker(!showColorPicker)}
-                  title="Changer la couleur"
-                  data-tour-id="tour-color-button"
-                >
-                  <Palette className="h-4 w-4 text-muted-foreground" />
-                </Button>
-                {showColorPicker && (
-                  <div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-2 z-50 bg-popover border rounded-xl shadow-xl p-4">
-                    <p className="text-sm font-medium mb-3">
-                      Couleur d&apos;accent
-                    </p>
-                    <HexColorPicker
-                      color={accentColor || "#f5f5f5"}
-                      onChange={(color) => onAccentColorChange?.(color)}
-                      style={{ width: "200px", height: "160px" }}
-                    />
-                    <button
-                      className="w-full mt-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
-                      onClick={() => onAccentColorChange?.(null)}
-                    >
-                      Réinitialiser
-                    </button>
-                  </div>
+              </>
+            )}
+
+            {/* Separator - hidden on mobile */}
+            <div className="hidden sm:block w-px h-6 bg-border mx-2" />
+
+            {/* Middle group: Styling */}
+            <button
+              ref={colorButtonRef}
+              className={`flex items-center justify-center h-9 w-9 rounded transition-colors ${
+                showColorPicker ? "bg-muted" : "hover:bg-muted"
+              }`}
+              onClick={() => {
+                if (colorButtonRef.current) {
+                  const rect = colorButtonRef.current.getBoundingClientRect();
+                  const popoverWidth = 252;
+                  let left = rect.left + rect.width / 2 - popoverWidth / 2;
+                  left = Math.max(
+                    8,
+                    Math.min(left, window.innerWidth - popoverWidth - 8),
+                  );
+                  setPopoverPosition({ left, top: rect.bottom + 8 });
+                }
+                setShowColorPicker(!showColorPicker);
+              }}
+              title="Couleur d'accent"
+              data-tour-id="tour-color-button"
+            >
+              <div className="relative">
+                <Palette className="h-5 w-5" />
+                {accentColor && (
+                  <div
+                    className="absolute -bottom-0.5 left-0 right-0 h-0.5 rounded-full"
+                    style={{ backgroundColor: accentColor }}
+                  />
                 )}
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className={`h-8 w-8 rounded-full ${
-                  document.client?.id
-                    ? "bg-muted hover:bg-muted/80"
-                    : "bg-muted/50 cursor-not-allowed opacity-50"
-                }`}
-                onClick={handleClientButtonClick}
-                disabled={!document.client?.id}
-                title={
-                  document.client?.id
-                    ? "Voir la fiche client"
-                    : "Aucun client lié"
+            </button>
+
+            {/* Separator - hidden on mobile */}
+            <div className="hidden sm:block w-px h-6 bg-border mx-2" />
+
+            {/* Document actions group */}
+            {document.type === "quote" && (
+              <button
+                className="flex items-center justify-center h-9 w-9 rounded hover:bg-muted transition-colors"
+                onClick={() => setShowSignatureModal(true)}
+                title="Signer le document"
+                data-tour-id="tour-signature-button"
+              >
+                <PenLine className="h-5 w-5" />
+              </button>
+            )}
+            {document.type === "quote" && onConvertToInvoice && (
+              <button
+                className="flex items-center justify-center h-9 w-9 rounded hover:bg-muted transition-colors"
+                onClick={handleConvertClick}
+                title="Convertir en facture"
+                data-tour-id="tour-convert-button"
+              >
+                <Receipt className="h-5 w-5" />
+              </button>
+            )}
+            <button
+              ref={clientButtonRef}
+              className={`flex items-center justify-center h-9 w-9 rounded transition-colors hover:bg-muted ${
+                showClientMenu ? "bg-muted" : ""
+              }`}
+              onClick={() => {
+                if (document.client?.id) {
+                  handleClientButtonClick();
+                } else {
+                  if (clientButtonRef.current) {
+                    const rect =
+                      clientButtonRef.current.getBoundingClientRect();
+                    const popoverWidth = 220;
+                    let left = rect.left + rect.width / 2 - popoverWidth / 2;
+                    left = Math.max(
+                      8,
+                      Math.min(left, window.innerWidth - popoverWidth - 8),
+                    );
+                    setPopoverPosition({ left, top: rect.bottom + 8 });
+                  }
+                  setShowClientMenu(!showClientMenu);
                 }
-                data-tour-id="tour-client-button"
-              >
-                <User
-                  className={`h-4 w-4 ${
-                    document.client?.id
-                      ? "text-muted-foreground"
-                      : "text-muted-foreground/40"
-                  }`}
-                />
-              </Button>
-              {document.type === "quote" && onConvertToInvoice && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 rounded-full bg-muted hover:bg-muted/80"
-                  onClick={handleConvertClick}
-                  title="Convertir en facture"
-                  data-tour-id="tour-convert-button"
-                >
-                  <Receipt className="h-4 w-4 text-muted-foreground" />
-                </Button>
+              }}
+              title={
+                document.client?.id ? "Voir la fiche client" : "Lier un client"
+              }
+              data-tour-id="tour-client-button"
+            >
+              <User className="h-5 w-5" />
+            </button>
+
+            {/* Separator - hidden on mobile */}
+            <div className="hidden sm:block w-px h-6 bg-border mx-2" />
+
+            {/* Export group */}
+            <button
+              ref={downloadButtonRef}
+              className={`flex items-center justify-center h-9 w-9 rounded transition-colors disabled:opacity-40 ${
+                showDownloadMenu ? "bg-muted" : "hover:bg-muted"
+              }`}
+              onClick={() => {
+                if (downloadButtonRef.current) {
+                  const rect =
+                    downloadButtonRef.current.getBoundingClientRect();
+                  const popoverWidth = 240;
+                  let left = rect.left + rect.width / 2 - popoverWidth / 2;
+                  left = Math.max(
+                    8,
+                    Math.min(left, window.innerWidth - popoverWidth - 8),
+                  );
+                  setPopoverPosition({ left, top: rect.bottom + 8 });
+                }
+                setShowDownloadMenu(!showDownloadMenu);
+              }}
+              disabled={isGeneratingPDF}
+              title="Télécharger"
+              data-tour-id="tour-download-button"
+            >
+              {isGeneratingPDF ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <Download className="h-5 w-5" />
               )}
-              {document.type === "quote" && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 rounded-full bg-muted hover:bg-muted/80"
-                  onClick={() => setShowSignatureModal(true)}
-                  title="Signer le document"
-                  data-tour-id="tour-signature-button"
-                >
-                  <PenLine className="h-4 w-4 text-muted-foreground" />
-                </Button>
-              )}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 rounded-full bg-muted hover:bg-muted/80"
-                onClick={handleDeleteClick}
-                title="Supprimer le document"
-                data-tour-id="tour-delete-button"
+            </button>
+
+            {/* Separator - hidden on mobile */}
+            <div className="hidden sm:block w-px h-6 bg-border mx-2" />
+
+            {/* Delete document */}
+            <button
+              className="flex items-center justify-center h-9 w-9 rounded hover:bg-destructive/10 hover:text-destructive transition-colors"
+              onClick={handleDeleteClick}
+              title="Supprimer le document"
+              data-tour-id="tour-delete-button"
+            >
+              <Trash2 className="h-5 w-5" />
+            </button>
+
+            {/* Spacer - only on larger screens */}
+            <div className="hidden sm:block flex-1 min-w-4" />
+
+            {/* Right side: Status */}
+            {isSaving && (
+              <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Sauvegarde...
+              </span>
+            )}
+
+            {/* Switch to chat button - visible on screens smaller than xl */}
+            {onSwitchToChat && (
+              <button
+                className="xl:hidden flex items-center justify-center h-9 w-9 rounded hover:bg-muted transition-colors"
+                onClick={onSwitchToChat}
+                title="Voir la conversation"
+                data-tour-id="tour-switch-chat-button"
               >
-                <Trash2 className="h-4 w-4 text-muted-foreground" />
-              </Button>
+                <MessageSquare className="h-5 w-5" />
+              </button>
+            )}
+          </div>
+
+          {/* Color picker popover */}
+          {showColorPicker && (
+            <div
+              ref={colorPopoverRef}
+              className="fixed z-50 bg-popover border rounded-2xl shadow-2xl p-4 animate-in fade-in slide-in-from-top-2 duration-200"
+              style={{ left: popoverPosition.left, top: popoverPosition.top }}
+            >
+              <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 rotate-45 bg-popover border-l border-t rounded-tl-sm" />
+              <p className="text-sm font-medium mb-3">Couleur d&apos;accent</p>
+              <HexColorPicker
+                color={accentColor || "#000000"}
+                onChange={(color) => onAccentColorChange?.(color)}
+                style={{ width: "220px", height: "180px" }}
+              />
+              <button
+                className="w-full mt-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
+                onClick={() => onAccentColorChange?.(null)}
+              >
+                Réinitialiser
+              </button>
+            </div>
+          )}
+
+          {/* Client menu popover */}
+          {showClientMenu && !document.client?.id && (
+            <div
+              ref={clientMenuRef}
+              className="fixed z-50 bg-popover border rounded-2xl shadow-2xl p-2 min-w-[220px] animate-in fade-in slide-in-from-top-2 duration-200"
+              style={{ left: popoverPosition.left, top: popoverPosition.top }}
+            >
+              <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 rotate-45 bg-popover border-l border-t rounded-tl-sm" />
+              <p className="text-xs font-medium text-muted-foreground px-2 py-1.5 mb-1">
+                Ajouter un client
+              </p>
+              <button
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm rounded-lg hover:bg-muted transition-colors text-left"
+                onClick={() => {
+                  setShowClientMenu(false);
+                  setShowClientPicker(true);
+                }}
+              >
+                <UserPlus className="h-4 w-4 text-muted-foreground" />
+                Lier un client existant
+              </button>
+              <button
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm rounded-lg hover:bg-muted transition-colors text-left"
+                onClick={() => {
+                  setShowClientMenu(false);
+                  setShowNewClientModal(true);
+                }}
+              >
+                <Plus className="h-4 w-4 text-muted-foreground" />
+                Créer un nouveau client
+              </button>
+            </div>
+          )}
+
+          {/* Download menu popover */}
+          {showDownloadMenu && (
+            <div
+              ref={downloadMenuRef}
+              className="fixed z-50 bg-popover border rounded-2xl shadow-2xl p-2 min-w-[240px] animate-in fade-in slide-in-from-top-2 duration-200"
+              style={{ left: popoverPosition.left, top: popoverPosition.top }}
+            >
+              <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 rotate-45 bg-popover border-l border-t rounded-tl-sm" />
+              <p className="text-xs font-medium text-muted-foreground px-2 py-1.5 mb-1">
+                Télécharger
+              </p>
+              <button
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm rounded-lg hover:bg-muted transition-colors text-left"
+                onClick={() => handleDownload("pdf")}
+                disabled={isGeneratingPDF}
+              >
+                <FileText className="h-4 w-4 text-muted-foreground" />
+                PDF Standard
+              </button>
+              {document.type === "invoice" && (
+                <>
+                  <button
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm rounded-lg hover:bg-muted transition-colors text-left"
+                    onClick={() => handleDownload("facturx")}
+                    disabled={isGeneratingPDF}
+                  >
+                    <FileText className="h-4 w-4 text-primary" />
+                    <span className="flex-1">PDF Factur-X</span>
+                    <span className="text-[10px] font-medium text-primary bg-primary/10 px-1.5 py-0.5 rounded">
+                      Recommandé
+                    </span>
+                  </button>
+                  <button
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm rounded-lg hover:bg-muted transition-colors text-left"
+                    onClick={() => handleDownload("xml")}
+                    disabled={isGeneratingPDF}
+                  >
+                    <FileCode className="h-4 w-4 text-muted-foreground" />
+                    XML Factur-X
+                  </button>
+                </>
+              )}
+              <button
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm rounded-lg hover:bg-muted transition-colors text-left"
+                onClick={() => handleDownload("excel")}
+                disabled={isGeneratingPDF}
+              >
+                <FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
+                Excel
+              </button>
             </div>
           )}
         </div>
-      </div>
+      )}
 
       {clientSyncError && (
         <div className="px-4 py-2 bg-amber-500/10 border-b border-amber-500/30">
@@ -672,11 +1096,11 @@ export function DocumentPreview({
                 <QuoteTemplate
                   data={mapToQuoteTemplateData(document)}
                   onUpdate={onDocumentUpdate}
-                  deleteMode={deleteLineMode}
-                  selectedLines={selectedLines}
+                  deleteMode={deleteMode}
+                  isItemSelected={isItemSelected}
+                  onSectionClick={handleSectionClick}
+                  onSubsectionClick={handleSubsectionClick}
                   onLineClick={handleLineClick}
-                  onLineMouseDown={handleLineMouseDown}
-                  onLineMouseEnter={handleLineMouseEnter}
                   accentColor={accentColor}
                   signature={document.signature}
                 />
@@ -690,11 +1114,11 @@ export function DocumentPreview({
                 <InvoiceTemplate
                   data={mapToInvoiceTemplateData(document)}
                   onUpdate={onDocumentUpdate}
-                  deleteMode={deleteLineMode}
-                  selectedLines={selectedLines}
+                  deleteMode={deleteMode}
+                  isItemSelected={isItemSelected}
+                  onSectionClick={handleSectionClick}
+                  onSubsectionClick={handleSubsectionClick}
                   onLineClick={handleLineClick}
-                  onLineMouseDown={handleLineMouseDown}
-                  onLineMouseEnter={handleLineMouseEnter}
                   accentColor={accentColor}
                 />
               </div>
@@ -950,9 +1374,9 @@ export function DocumentPreview({
         </DialogContent>
       </Dialog>
 
-      {/* Input for screens smaller than 2xl */}
+      {/* Input for screens smaller than xl */}
       {showMobileInput && mobileInputComponent && (
-        <div className="2xl:hidden border-t bg-background">
+        <div className="xl:hidden border-t bg-background">
           {mobileInputComponent}
         </div>
       )}
@@ -966,6 +1390,21 @@ export function DocumentPreview({
           existingSignature={document.signature}
         />
       )}
+
+      {/* Client Picker Modal */}
+      <ClientPickerModal
+        clients={clients}
+        isOpen={showClientPicker}
+        onClose={() => setShowClientPicker(false)}
+        onSelect={handleClientSelect}
+      />
+
+      {/* New Client Modal */}
+      <NewClientModal
+        isOpen={showNewClientModal}
+        onClose={() => setShowNewClientModal(false)}
+        onClientCreated={handleNewClientCreated}
+      />
     </div>
   );
 }

@@ -19,8 +19,25 @@ export function useThemeSync() {
   return React.useContext(ThemeSyncContext);
 }
 
-function ThemeSyncProvider({ children }: { children: React.ReactNode }) {
-  const { setTheme } = useTheme();
+function ThemeSyncProvider({
+  children,
+  initialTheme,
+}: {
+  children: React.ReactNode;
+  initialTheme?: "light" | "dark";
+}) {
+  const { setTheme, theme } = useTheme();
+  const hasAppliedInitialTheme = React.useRef(false);
+
+  // Forcer le thème de la DB au premier rendu (priorité sur localStorage)
+  React.useEffect(() => {
+    if (initialTheme && !hasAppliedInitialTheme.current) {
+      hasAppliedInitialTheme.current = true;
+      if (theme !== initialTheme) {
+        setTheme(initialTheme);
+      }
+    }
+  }, [initialTheme, theme, setTheme]);
 
   const syncTheme = React.useCallback(
     async (theme: "light" | "dark") => {
@@ -47,7 +64,9 @@ export function ThemeProvider({ children, initialTheme }: ThemeProviderProps) {
       disableTransitionOnChange
       storageKey="buildify-theme"
     >
-      <ThemeSyncProvider>{children}</ThemeSyncProvider>
+      <ThemeSyncProvider initialTheme={initialTheme}>
+        {children}
+      </ThemeSyncProvider>
     </NextThemesProvider>
   );
 }

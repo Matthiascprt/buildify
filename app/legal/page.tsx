@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
+import { ThemeProvider } from "next-themes";
 import {
   Scale,
   FileText,
@@ -10,7 +12,7 @@ import {
   Cookie,
   ScrollText,
   ChevronRight,
-  ArrowLeft,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -56,6 +58,20 @@ function getInitialSection(param: string | null): LegalSection {
 }
 
 export default function PublicLegalPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+        </div>
+      }
+    >
+      <LegalPageContent />
+    </Suspense>
+  );
+}
+
+function LegalPageContent() {
   const searchParams = useSearchParams();
   const sectionParam = searchParams.get("section");
   const [activeSection, setActiveSection] = useState<LegalSection>(() =>
@@ -63,96 +79,142 @@ export default function PublicLegalPage() {
   );
 
   return (
-    <div className="min-h-screen bg-linear-to-b from-background to-muted/20">
-      {/* Header */}
-      <header className="border-b bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60 sticky top-0 z-50">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-md border border-orange-200 dark:border-orange-900 bg-orange-50 dark:bg-orange-950/20 flex items-center justify-center">
-              <span className="text-orange-600 dark:text-orange-400 font-bold text-sm">B</span>
-            </div>
-            <span className="font-semibold text-lg">Buildify</span>
-          </Link>
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Retour
+    <ThemeProvider attribute="class" forcedTheme="light" enableSystem={false}>
+      <div className="min-h-screen flex flex-col bg-white text-zinc-950">
+        {/* Header */}
+        <header className="h-16 border-b border-zinc-200/80 flex items-center justify-between px-4 lg:px-8 sticky top-0 bg-white/80 backdrop-blur-lg z-50">
+          <div className="flex items-center gap-8">
+            <Link
+              href="/"
+              className="flex items-center gap-2 font-bold text-xl"
+            >
+              <Image
+                src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/buildify-assets/Logo/Logo02.svg`}
+                alt="Buildify"
+                width={32}
+                height={32}
+                className="flex-shrink-0 drop-shadow-sm"
+                unoptimized
+              />
+              Buildify
             </Link>
-          </Button>
-        </div>
-      </header>
+            <nav className="hidden md:flex items-center gap-6">
+              <Link
+                href="/#fonctionnalites"
+                className="text-sm text-zinc-600 hover:text-zinc-950 transition-colors"
+              >
+                Fonctionnalités
+              </Link>
+              <Link
+                href="/#tarifs"
+                className="text-sm text-zinc-600 hover:text-zinc-950 transition-colors"
+              >
+                Tarifs
+              </Link>
+              <Link
+                href="/#faq"
+                className="text-sm text-zinc-600 hover:text-zinc-950 transition-colors"
+              >
+                FAQ
+              </Link>
+              <Link
+                href="/help"
+                className="text-sm text-zinc-600 hover:text-zinc-950 transition-colors"
+              >
+                Aide
+              </Link>
+            </nav>
+          </div>
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" asChild>
+              <Link href="/login">Connexion</Link>
+            </Button>
+            <Button asChild className="hidden sm:inline-flex">
+              <Link href="/onboarding">Commencer</Link>
+            </Button>
+          </div>
+        </header>
 
-      <div className="container mx-auto px-4 py-12">
-        {/* Page Header */}
-        <div className="mb-10 text-center">
-          <h1 className="text-4xl font-bold tracking-tight mb-3">
-            Informations Legales
-          </h1>
-          <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-            Consultez nos conditions d&apos;utilisation, mentions legales et
-            politiques de confidentialite
-          </p>
-        </div>
+        <div className="flex-1 container mx-auto px-4 py-12">
+          {/* Page Header */}
+          <div className="mb-10 text-center">
+            <h1 className="text-4xl font-bold tracking-tight mb-3">
+              Informations Legales
+            </h1>
+            <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
+              Consultez nos conditions d&apos;utilisation, mentions legales et
+              politiques de confidentialite
+            </p>
+          </div>
 
-        <div className="grid lg:grid-cols-[300px_1fr] gap-8 max-w-6xl mx-auto">
-          {/* Navigation */}
-          <nav className="space-y-2">
-            {sections.map((section) => {
-              const Icon = section.icon;
-              const isActive = activeSection === section.id;
-              return (
-                <button
-                  key={section.id}
-                  onClick={() => setActiveSection(section.id)}
-                  className={cn(
-                    "w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-all border",
-                    isActive
-                      ? "bg-orange-50/50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-900"
-                      : "hover:bg-muted/50 border-transparent",
-                  )}
-                >
-                  <div
+          <div className="grid lg:grid-cols-[300px_1fr] gap-8 max-w-6xl mx-auto">
+            {/* Navigation */}
+            <nav className="space-y-2">
+              {sections.map((section) => {
+                const Icon = section.icon;
+                const isActive = activeSection === section.id;
+                return (
+                  <button
+                    key={section.id}
+                    onClick={() => setActiveSection(section.id)}
                     className={cn(
-                      "h-9 w-9 rounded-md border flex items-center justify-center shrink-0 transition-all",
+                      "w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-all border",
                       isActive
-                        ? "bg-orange-50 dark:bg-orange-950/30 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-900"
-                        : "bg-orange-50/30 dark:bg-orange-950/10 text-orange-600/70 dark:text-orange-400/70 border-orange-200/50 dark:border-orange-900/50",
+                        ? "bg-orange-50/50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-900"
+                        : "hover:bg-muted/50 border-transparent",
                     )}
                   >
-                    <Icon className="h-4 w-4" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">{section.shortTitle}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Maj: {section.lastUpdate}
-                    </p>
-                  </div>
-                  <ChevronRight
-                    className={cn(
-                      "h-4 w-4 shrink-0 transition-transform text-muted-foreground/50",
-                    )}
-                  />
-                </button>
-              );
-            })}
-          </nav>
+                    <div
+                      className={cn(
+                        "h-9 w-9 rounded-md border flex items-center justify-center shrink-0 transition-all",
+                        isActive
+                          ? "bg-orange-50 dark:bg-orange-950/30 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-900"
+                          : "bg-orange-50/30 dark:bg-orange-950/10 text-orange-600/70 dark:text-orange-400/70 border-orange-200/50 dark:border-orange-900/50",
+                      )}
+                    >
+                      <Icon className="h-4 w-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">
+                        {section.shortTitle}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Maj: {section.lastUpdate}
+                      </p>
+                    </div>
+                    <ChevronRight
+                      className={cn(
+                        "h-4 w-4 shrink-0 transition-transform text-muted-foreground/50",
+                      )}
+                    />
+                  </button>
+                );
+              })}
+            </nav>
 
-          {/* Content */}
-          <div className="rounded-lg border bg-card p-8 lg:p-10">
-            <LegalContent section={activeSection} />
+            {/* Content */}
+            <div className="rounded-lg border bg-card p-8 lg:p-10">
+              <LegalContent section={activeSection} />
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Footer */}
-      <footer className="border-t mt-20 py-8 bg-muted/30">
-        <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
-          <p>
-            &copy; {new Date().getFullYear()} Buildify. Tous droits reserves.
-          </p>
-        </div>
-      </footer>
-    </div>
+        {/* Footer */}
+        <footer className="border-t border-zinc-200 bg-zinc-50 mt-20">
+          <div className="max-w-6xl mx-auto px-4 py-8">
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+              <p className="text-sm text-zinc-500">
+                &copy; {new Date().getFullYear()} Buildify. Tous droits
+                reserves.
+              </p>
+              <p className="text-sm text-zinc-500">
+                Fait avec passion en France
+              </p>
+            </div>
+          </div>
+        </footer>
+      </div>
+    </ThemeProvider>
   );
 }
 
@@ -324,7 +386,7 @@ function MentionsContent() {
       <ul>
         <li>Par email : contact@buildify.fr</li>
         <li>Par courrier : 123 Avenue de l&apos;Innovation, 75001 Paris</li>
-        <li>Par telephone : +33 1 23 45 67 89</li>
+        <li>Par telephone : 06 10 49 06 37</li>
       </ul>
     </>
   );

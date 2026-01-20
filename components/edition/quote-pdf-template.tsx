@@ -8,6 +8,25 @@ import {
   StyleSheet,
   Image,
 } from "@react-pdf/renderer";
+import type { Section } from "@/lib/types/document";
+
+// Fonction pour éclaircir une couleur hex
+const lightenColor = (hex: string, percent: number): string => {
+  const num = parseInt(hex.replace("#", ""), 16);
+  const r = Math.min(
+    255,
+    Math.floor((num >> 16) + (255 - (num >> 16)) * percent),
+  );
+  const g = Math.min(
+    255,
+    Math.floor(((num >> 8) & 0x00ff) + (255 - ((num >> 8) & 0x00ff)) * percent),
+  );
+  const b = Math.min(
+    255,
+    Math.floor((num & 0x0000ff) + (255 - (num & 0x0000ff)) * percent),
+  );
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
+};
 
 const colors = {
   text: "#1a1a1a",
@@ -17,264 +36,243 @@ const colors = {
   background: "#f5f5f5",
 };
 
-// Calcule la luminosité relative d'une couleur (WCAG)
-function getLuminance(hex: string): number {
-  const rgb = hex
-    .replace("#", "")
-    .match(/.{2}/g)
-    ?.map((x) => {
-      const c = parseInt(x, 16) / 255;
-      return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
-    }) || [0, 0, 0];
-  return 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
-}
-
-// Détermine si le texte doit être blanc ou noir pour un bon contraste
-function getContrastColor(bgColor: string): string {
-  const luminance = getLuminance(bgColor);
-  return luminance > 0.4 ? "#1f2937" : "#ffffff";
-}
-
-const styles = StyleSheet.create({
-  page: {
-    fontFamily: "Helvetica",
-    fontSize: 10,
-    padding: 40,
-    paddingBottom: 180,
-    color: colors.text,
-    backgroundColor: colors.white,
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 30,
-  },
-  logo: {
-    height: 50,
-  },
-  logoPlaceholder: {
-    width: 100,
-    height: 50,
-    backgroundColor: colors.background,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  logoText: {
-    fontSize: 12,
-    fontWeight: 600,
-    color: colors.textMuted,
-  },
-  headerRight: {
-    textAlign: "right",
-  },
-  title: {
-    fontSize: 16,
-    fontWeight: 700,
-    marginBottom: 4,
-  },
-  subtitle: {
-    fontSize: 9,
-    color: colors.textMuted,
-  },
-  infoSection: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 25,
-  },
-  infoBlock: {
-    width: "48%",
-  },
-  infoTitle: {
-    fontSize: 12,
-    fontWeight: 700,
-    marginBottom: 8,
-  },
-  infoText: {
-    fontSize: 9,
-    color: colors.textMuted,
-    marginBottom: 3,
-  },
-  infoRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 3,
-  },
-  projectTitle: {
-    fontSize: 14,
-    fontWeight: 700,
-    marginBottom: 15,
-  },
-  table: {
-    marginBottom: 20,
-  },
-  tableHeader: {
-    flexDirection: "row",
-    backgroundColor: colors.background,
-    borderTopLeftRadius: 4,
-    borderTopRightRadius: 4,
-    paddingVertical: 8,
-    paddingHorizontal: 8,
-  },
-  tableHeaderCell: {
-    fontSize: 9,
-    fontWeight: 600,
-    color: colors.textMuted,
-  },
-  tableRow: {
-    flexDirection: "row",
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    paddingVertical: 8,
-    paddingHorizontal: 8,
-  },
-  tableSectionRow: {
-    flexDirection: "row",
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    paddingVertical: 8,
-    paddingHorizontal: 8,
-    backgroundColor: "#fafafa",
-  },
-  colId: { width: "6%" },
-  colDesignation: { width: "40%" },
-  colQuantity: { width: "12%", textAlign: "center" },
-  colUnitPrice: { width: "14%", textAlign: "center" },
-  colTva: { width: "10%", textAlign: "center" },
-  colTotal: { width: "18%", textAlign: "right" },
-  cellText: {
-    fontSize: 9,
-  },
-  cellTextBold: {
-    fontSize: 9,
-    fontWeight: 700,
-  },
-  cellTextMuted: {
-    fontSize: 8,
-    color: colors.textMuted,
-    marginTop: 2,
-  },
-  totalsSection: {
-    alignItems: "flex-end",
-    marginBottom: 30,
-  },
-  totalsBox: {
-    width: 180,
-  },
-  totalRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 4,
-  },
-  totalLabel: {
-    fontSize: 9,
-    color: colors.textMuted,
-  },
-  totalValue: {
-    fontSize: 9,
-  },
-  totalRowFinal: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingTop: 6,
-    marginTop: 4,
-  },
-  totalLabelBold: {
-    fontSize: 10,
-    fontWeight: 700,
-  },
-  totalValueBold: {
-    fontSize: 10,
-    fontWeight: 700,
-  },
-  footerSection: {
-    position: "absolute",
-    bottom: 50,
-    left: 40,
-    right: 40,
-  },
-  footerContent: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 20,
-  },
-  paymentConditions: {
-    width: "55%",
-  },
-  signature: {
-    width: "40%",
-    textAlign: "right",
-  },
-  footerTitle: {
-    fontSize: 10,
-    fontWeight: 700,
-    marginBottom: 6,
-  },
-  footerText: {
-    fontSize: 8,
-    color: colors.textMuted,
-    lineHeight: 1.4,
-  },
-  signatureText: {
-    fontSize: 9,
-    marginBottom: 4,
-  },
-  signatureTextMuted: {
-    fontSize: 9,
-    color: colors.textMuted,
-    marginBottom: 25,
-  },
-  signatureLine: {
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    width: 120,
-    marginLeft: "auto",
-  },
-  signatureImage: {
-    width: 120,
-    height: 50,
-    marginLeft: "auto",
-    objectFit: "contain" as const,
-  },
-  legalNotice: {
-    textAlign: "center",
-    fontSize: 8,
-    color: colors.textMuted,
-    paddingTop: 15,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  pageNumber: {
-    position: "absolute",
-    bottom: 20,
-    left: 0,
-    right: 0,
-    textAlign: "center",
-    fontSize: 8,
-    color: colors.textMuted,
-  },
-});
-
-const formatPrice = (value: number | undefined): string => {
-  if (value === undefined || value === null) return "0.00";
-  return value.toFixed(2);
+const createStyles = (themeColor: string) => {
+  const lighterColor = lightenColor(themeColor, 0.3);
+  return StyleSheet.create({
+    page: {
+      fontFamily: "Helvetica",
+      fontSize: 10,
+      padding: 40,
+      paddingBottom: 60,
+      color: colors.text,
+      backgroundColor: colors.white,
+    },
+    header: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+      marginBottom: 30,
+    },
+    headerNoLogo: {
+      marginBottom: 30,
+    },
+    logo: {
+      height: 50,
+    },
+    logoPlaceholder: {
+      width: 100,
+      height: 50,
+    },
+    headerRight: {
+      textAlign: "right",
+    },
+    title: {
+      fontSize: 16,
+      fontWeight: 700,
+      marginBottom: 4,
+    },
+    subtitle: {
+      fontSize: 9,
+      color: colors.textMuted,
+    },
+    infoSection: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginBottom: 25,
+    },
+    infoBlock: {
+      width: "48%",
+    },
+    infoTitle: {
+      fontSize: 12,
+      fontWeight: 700,
+      marginBottom: 8,
+    },
+    infoText: {
+      fontSize: 9,
+      color: colors.textMuted,
+      marginBottom: 4,
+    },
+    projectTitle: {
+      fontSize: 14,
+      fontWeight: 700,
+      marginBottom: 15,
+    },
+    table: {
+      marginBottom: 20,
+    },
+    tableHeader: {
+      flexDirection: "row",
+      paddingVertical: 10,
+      paddingHorizontal: 4,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    tableHeaderCell: {
+      fontSize: 8,
+      fontWeight: 700,
+      color: "#000000",
+      textTransform: "uppercase" as const,
+      letterSpacing: 0.5,
+    },
+    tableRow: {
+      flexDirection: "row",
+      borderBottomWidth: 0.5,
+      borderBottomColor: "#e0e0e0",
+      paddingVertical: 10,
+      paddingHorizontal: 4,
+    },
+    tableSectionRow: {
+      flexDirection: "row",
+      paddingVertical: 10,
+      paddingHorizontal: 4,
+      borderBottomWidth: 2,
+      borderBottomColor: themeColor,
+    },
+    tableSubsectionRow: {
+      flexDirection: "row",
+      paddingVertical: 8,
+      paddingHorizontal: 4,
+      borderBottomWidth: 1,
+      borderBottomColor: lighterColor,
+    },
+    colId: { width: "8%" },
+    colDesignation: { width: "38%" },
+    colQuantity: { width: "12%", textAlign: "center" },
+    colUnitPrice: { width: "14%", textAlign: "center" },
+    colTva: { width: "10%", textAlign: "center" },
+    colTotal: { width: "18%", textAlign: "right" },
+    cellText: {
+      fontSize: 9,
+    },
+    cellTextBold: {
+      fontSize: 9,
+      fontWeight: 700,
+    },
+    cellTextAccent: {
+      fontSize: 9,
+      fontWeight: 700,
+      color: themeColor,
+    },
+    cellTextSubsection: {
+      fontSize: 9,
+      fontWeight: 600,
+      color: lighterColor,
+    },
+    cellTextMuted: {
+      fontSize: 8,
+      color: colors.textMuted,
+      marginTop: 2,
+    },
+    totalsSection: {
+      alignItems: "flex-end",
+      marginBottom: 30,
+    },
+    totalsBox: {
+      width: 180,
+    },
+    totalRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginBottom: 4,
+    },
+    totalLabel: {
+      fontSize: 9,
+      color: colors.textMuted,
+    },
+    totalValue: {
+      fontSize: 9,
+    },
+    totalRowFinal: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+      paddingTop: 6,
+      marginTop: 4,
+    },
+    totalLabelBold: {
+      fontSize: 10,
+      fontWeight: 700,
+    },
+    totalValueBold: {
+      fontSize: 10,
+      fontWeight: 700,
+    },
+    footerSection: {
+      marginTop: 30,
+    },
+    footerContent: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginBottom: 20,
+    },
+    paymentConditions: {
+      width: "55%",
+    },
+    signature: {
+      width: "40%",
+      textAlign: "right",
+    },
+    footerTitle: {
+      fontSize: 10,
+      fontWeight: 700,
+      marginBottom: 6,
+    },
+    footerText: {
+      fontSize: 8,
+      color: colors.textMuted,
+      lineHeight: 1.4,
+    },
+    signatureText: {
+      fontSize: 9,
+      marginBottom: 4,
+    },
+    signatureTextMuted: {
+      fontSize: 9,
+      color: colors.textMuted,
+      marginBottom: 25,
+    },
+    signatureLine: {
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+      width: 150,
+      height: 60,
+      marginLeft: "auto",
+    },
+    signatureImage: {
+      width: 150,
+      height: 70,
+      marginLeft: "auto",
+      objectFit: "contain" as const,
+    },
+    legalNotice: {
+      textAlign: "center",
+      fontSize: 8,
+      color: colors.textMuted,
+      paddingTop: 15,
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+    },
+    pageNumber: {
+      position: "absolute",
+      bottom: 20,
+      left: 0,
+      right: 0,
+      textAlign: "center",
+      fontSize: 8,
+      color: colors.textMuted,
+    },
+  });
 };
 
-interface LineItem {
-  lineId: string;
-  id: string;
-  designation: string;
-  description?: string;
-  quantity?: string;
-  unitPrice?: number;
-  tva?: number;
-  total?: number;
-  isSection?: boolean;
-  sectionTotal?: number;
-  sectionTotalTTC?: number;
-}
+const formatPrice = (value: number | undefined): string => {
+  if (value === undefined || value === null) return "0,00";
+  return value.toLocaleString("fr-FR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+};
 
 interface QuoteData {
   number: string;
@@ -287,6 +285,7 @@ interface QuoteData {
     phone: string;
     email: string;
     siret: string;
+    rcs?: string;
     logoUrl?: string;
     paymentTerms?: string;
     legalNotice?: string;
@@ -300,7 +299,7 @@ interface QuoteData {
     siret?: string;
   };
   projectTitle: string;
-  items: LineItem[];
+  sections: Section[];
   totalHT: number;
   tvaRate: number;
   tvaAmount: number;
@@ -321,28 +320,34 @@ export function QuotePDFTemplate({
   accentColor,
   signature,
 }: QuotePDFTemplateProps) {
-  const hasCustomColor = accentColor !== null && accentColor !== undefined;
-  const bgColor = hasCustomColor ? accentColor : "#f5f5f5";
-  const textColor = hasCustomColor ? getContrastColor(accentColor) : "#666666";
+  const themeColor = accentColor || "#000000";
+  const styles = createStyles(themeColor);
+
   return (
     <Document>
       <Page size="A4" style={styles.page}>
         {/* Header */}
-        <View style={styles.header}>
-          {data.company.logoUrl ? (
-            // eslint-disable-next-line jsx-a11y/alt-text
+        {data.company.logoUrl ? (
+          <View style={styles.header}>
+            {/* eslint-disable-next-line jsx-a11y/alt-text */}
             <Image src={data.company.logoUrl} style={styles.logo} />
-          ) : (
-            <View style={styles.logoPlaceholder}>
-              <Text style={styles.logoText}>LOGO</Text>
+            <View style={styles.headerRight}>
+              <Text style={styles.title}>Devis n° {data.number}</Text>
+              <Text style={styles.subtitle}>Réalisé le {data.date}</Text>
+              <Text style={styles.subtitle}>
+                Valable jusqu&apos;au {data.validity}
+              </Text>
             </View>
-          )}
-          <View style={styles.headerRight}>
+          </View>
+        ) : (
+          <View style={styles.headerNoLogo}>
             <Text style={styles.title}>Devis n° {data.number}</Text>
             <Text style={styles.subtitle}>Réalisé le {data.date}</Text>
-            <Text style={styles.subtitle}>Valable {data.validity}</Text>
+            <Text style={styles.subtitle}>
+              Valable jusqu&apos;au {data.validity}
+            </Text>
           </View>
-        </View>
+        )}
 
         {/* Company and Client Info */}
         <View style={styles.infoSection}>
@@ -353,6 +358,9 @@ export function QuotePDFTemplate({
             <Text style={styles.infoText}>{data.company.phone}</Text>
             <Text style={styles.infoText}>{data.company.email}</Text>
             <Text style={styles.infoText}>SIRET: {data.company.siret}</Text>
+            {data.company.rcs && (
+              <Text style={styles.infoText}>RCS: {data.company.rcs}</Text>
+            )}
           </View>
           <View style={styles.infoBlock}>
             <Text style={styles.infoTitle}>{data.client.name || "Client"}</Text>
@@ -369,116 +377,97 @@ export function QuotePDFTemplate({
         {/* Project Title */}
         <Text style={styles.projectTitle}>{data.projectTitle}</Text>
 
-        {/* Items Table */}
+        {/* Items Table - Hierarchical Structure */}
         <View style={styles.table}>
-          <View
-            style={[styles.tableHeader, { backgroundColor: bgColor }]}
-            fixed
-          >
-            <Text
-              style={[
-                styles.tableHeaderCell,
-                styles.colId,
-                { color: textColor },
-              ]}
-            >
-              #
-            </Text>
-            <Text
-              style={[
-                styles.tableHeaderCell,
-                styles.colDesignation,
-                { color: textColor },
-              ]}
-            >
+          <View style={styles.tableHeader} fixed>
+            <Text style={[styles.tableHeaderCell, styles.colId]}>N°</Text>
+            <Text style={[styles.tableHeaderCell, styles.colDesignation]}>
               Désignation
             </Text>
-            <Text
-              style={[
-                styles.tableHeaderCell,
-                styles.colQuantity,
-                { color: textColor },
-              ]}
-            >
-              Quantité
+            <Text style={[styles.tableHeaderCell, styles.colQuantity]}>
+              Qté
             </Text>
-            <Text
-              style={[
-                styles.tableHeaderCell,
-                styles.colUnitPrice,
-                { color: textColor },
-              ]}
-            >
-              Prix unit. HT
+            <Text style={[styles.tableHeaderCell, styles.colUnitPrice]}>
+              Prix U.
             </Text>
-            <Text
-              style={[
-                styles.tableHeaderCell,
-                styles.colTva,
-                { color: textColor },
-              ]}
-            >
-              TVA
-            </Text>
-            <Text
-              style={[
-                styles.tableHeaderCell,
-                styles.colTotal,
-                { color: textColor },
-              ]}
-            >
-              Total TTC
+            <Text style={[styles.tableHeaderCell, styles.colTva]}>TVA</Text>
+            <Text style={[styles.tableHeaderCell, styles.colTotal]}>
+              Total HT
             </Text>
           </View>
-          {data.items.map((item) => (
-            <View
-              key={item.lineId}
-              style={item.isSection ? styles.tableSectionRow : styles.tableRow}
-              wrap={false}
-            >
-              <Text
-                style={[
-                  item.isSection ? styles.cellTextBold : styles.cellText,
-                  styles.colId,
-                ]}
-              >
-                {item.id}
-              </Text>
-              <View style={styles.colDesignation}>
-                <Text
-                  style={item.isSection ? styles.cellTextBold : styles.cellText}
-                >
-                  {item.designation}
+
+          {data.sections.map((section) => (
+            <View key={section.sectionId}>
+              {/* Section Row */}
+              <View style={styles.tableSectionRow} wrap={false}>
+                <Text style={[styles.cellTextAccent, styles.colId]}>
+                  {section.sectionNumber}
                 </Text>
-                {!item.isSection && item.description && (
-                  <Text style={styles.cellTextMuted}>{item.description}</Text>
-                )}
+                <Text style={[styles.cellTextAccent, { width: "74%" }]}>
+                  {section.sectionLabel}
+                </Text>
+                <Text style={[styles.cellTextAccent, styles.colTotal]}>
+                  {formatPrice(section.totalHT)} €
+                </Text>
               </View>
-              <Text style={[styles.cellText, styles.colQuantity]}>
-                {item.isSection ? "" : item.quantity}
-              </Text>
-              <Text style={[styles.cellText, styles.colUnitPrice]}>
-                {item.isSection ? "" : `${formatPrice(item.unitPrice)} €`}
-              </Text>
-              <Text style={[styles.cellText, styles.colTva]}>
-                {item.isSection ? "" : `${item.tva}%`}
-              </Text>
-              <Text
-                style={[
-                  item.isSection ? styles.cellTextBold : styles.cellText,
-                  styles.colTotal,
-                ]}
-              >
-                {item.isSection
-                  ? `${formatPrice(item.sectionTotalTTC ?? item.sectionTotal)} €`
-                  : `${formatPrice((item.total || 0) * (1 + (item.tva || 0) / 100))} €`}
-              </Text>
+
+              {/* Subsections */}
+              {section.subsections.map((subsection) => (
+                <View key={subsection.subsectionId}>
+                  {/* Subsection Row */}
+                  <View style={styles.tableSubsectionRow} wrap={false}>
+                    <Text style={[styles.cellTextSubsection, styles.colId]}>
+                      {subsection.subsectionNumber}
+                    </Text>
+                    <Text style={[styles.cellTextSubsection, { width: "74%" }]}>
+                      {subsection.subsectionLabel}
+                    </Text>
+                    <Text style={[styles.cellTextSubsection, styles.colTotal]}>
+                      {formatPrice(subsection.totalHT)} €
+                    </Text>
+                  </View>
+
+                  {/* Lines */}
+                  {subsection.lines.map((line) => (
+                    <View
+                      key={line.lineId}
+                      style={styles.tableRow}
+                      wrap={false}
+                    >
+                      <Text style={[styles.cellText, styles.colId]}>
+                        {line.lineNumber}
+                      </Text>
+                      <View style={styles.colDesignation}>
+                        <Text style={styles.cellText}>{line.designation}</Text>
+                        {line.description && (
+                          <Text style={styles.cellTextMuted}>
+                            {line.description}
+                          </Text>
+                        )}
+                      </View>
+                      <Text style={[styles.cellText, styles.colQuantity]}>
+                        {line.quantity}
+                        {line.unit ? ` ${line.unit}` : ""}
+                      </Text>
+                      <Text style={[styles.cellText, styles.colUnitPrice]}>
+                        {formatPrice(line.unitPriceHT)} €
+                      </Text>
+                      <Text style={[styles.cellText, styles.colTva]}>
+                        {line.vatRate}%
+                      </Text>
+                      <Text style={[styles.cellTextBold, styles.colTotal]}>
+                        {formatPrice(line.totalHT)} €
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              ))}
             </View>
           ))}
         </View>
 
-        {/* Totals */}
-        <View style={styles.totalsSection}>
+        {/* Totals - wrap={false} keeps all totals together on same page */}
+        <View style={styles.totalsSection} wrap={false}>
           <View style={styles.totalsBox}>
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>Total HT</Text>
@@ -509,8 +498,8 @@ export function QuotePDFTemplate({
           </View>
         </View>
 
-        {/* Footer - Fixed at bottom */}
-        <View style={styles.footerSection} fixed>
+        {/* Footer */}
+        <View style={styles.footerSection}>
           <View style={styles.footerContent}>
             <View style={styles.paymentConditions}>
               <Text style={styles.footerTitle}>Conditions de paiement</Text>

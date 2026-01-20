@@ -22,7 +22,8 @@ interface ChatRequestBody {
   isFirstMessage?: boolean;
 }
 
-const MAX_TOOL_ITERATIONS = 10;
+const MAX_TOOL_ITERATIONS = 3;
+const MAX_MESSAGES_HISTORY = 6;
 
 export async function POST(req: NextRequest) {
   try {
@@ -49,9 +50,12 @@ export async function POST(req: NextRequest) {
       nextInvoiceNumber,
     });
 
+    // Limit message history to last N messages for performance
+    const recentMessages = messages.slice(-MAX_MESSAGES_HISTORY);
+
     const openaiMessages: ChatCompletionMessageParam[] = [
       { role: "system", content: systemPrompt },
-      ...messages.map(
+      ...recentMessages.map(
         (msg) =>
           ({
             role: msg.role,
@@ -73,7 +77,7 @@ export async function POST(req: NextRequest) {
       iterations++;
 
       const completion = await openai.chat.completions.create({
-        model: "gpt-4o",
+        model: "gpt-4o-mini",
         messages: openaiMessages,
         tools: documentTools,
         tool_choice: "auto",

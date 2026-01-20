@@ -6,7 +6,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import {
   ArrowRight,
-  Mic,
   MessageSquare,
   FileText,
   Palette,
@@ -35,7 +34,6 @@ interface TutorialStep {
   targetId?: string;
   quoteOnly?: boolean;
   preferredPosition?: TooltipPosition;
-  requiredView?: "chat" | "preview";
   desktopOnly?: boolean;
   mobileOnly?: boolean;
 }
@@ -48,29 +46,15 @@ const tutorialSteps: TutorialStep[] = [
       "Je suis Max, votre assistant intelligent. Je vais vous guider à travers les fonctionnalités de l'éditeur.",
     icon: <Sparkles className="w-5 h-5" />,
     tip: "Conseil : Vous pouvez toujours me poser des questions !",
-    requiredView: "chat",
   },
   {
-    id: "voice",
-    title: "Parlez-moi, je vous écoute !",
-    description:
-      "Utilisez ce bouton micro pour me dicter votre devis. Décrivez les travaux, quantités et prix.",
-    icon: <Mic className="w-5 h-5" />,
-    tip: 'Exemple : "Pose de carrelage 20m² à 45€/m²"',
-    targetId: "tour-mic-button",
-    preferredPosition: "top",
-    requiredView: "chat",
-  },
-  {
-    id: "chat",
+    id: "chat-button",
     title: "Discutez avec moi",
-    description:
-      "Préférez taper ? Utilisez cette zone pour me décrire votre devis ou demander des modifications.",
+    description: "Cliquez ici pour m'ouvrir et créer vos documents ensemble.",
     icon: <MessageSquare className="w-5 h-5" />,
-    tip: 'Essayez : "Ajoute une ligne pour les matériaux"',
-    targetId: "tour-chat-input",
+    tip: 'Exemple : "Ajoute une ligne plomberie"',
+    targetId: "tour-chat-button",
     preferredPosition: "top",
-    requiredView: "chat",
   },
   {
     id: "document",
@@ -80,49 +64,25 @@ const tutorialSteps: TutorialStep[] = [
     icon: <FileText className="w-5 h-5" />,
     tip: "Les modifications sont sauvegardées automatiquement",
     targetId: "tour-document-preview",
-    requiredView: "preview",
     desktopOnly: true,
   },
   {
-    id: "switch-chat",
-    title: "Retour à la conversation",
+    id: "add-elements",
+    title: "Ajouter du contenu",
     description:
-      "Ce bouton vous permet de revenir à la conversation avec Max pour continuer à modifier votre document.",
-    icon: <MessageSquare className="w-5 h-5" />,
-    tip: "Basculez facilement entre le chat et l'aperçu",
-    targetId: "tour-switch-chat-button",
-    requiredView: "preview",
-    mobileOnly: true,
-  },
-  {
-    id: "add-line",
-    title: "Ajouter une ligne",
-    description:
-      "Besoin d'une nouvelle prestation ? Ce bouton ajoute une ligne vide à votre document.",
+      "Ces trois boutons vous permettent d'ajouter une section, une sous-section ou une ligne à votre document.",
     icon: <Plus className="w-5 h-5" />,
-    tip: "Vous pouvez aussi demander à Max d'ajouter des lignes",
-    targetId: "tour-add-line-button",
-    requiredView: "preview",
+    tip: "De gauche à droite : section, sous-section, ligne",
+    targetId: "tour-add-elements",
   },
   {
-    id: "remove-line",
-    title: "Supprimer des lignes",
+    id: "remove-elements",
+    title: "Supprimer des éléments",
     description:
-      "Activez ce mode pour sélectionner et supprimer une ou plusieurs lignes de votre document.",
+      "Activez ce mode pour sélectionner et supprimer des sections, sous-sections ou lignes de votre document.",
     icon: <Minus className="w-5 h-5" />,
-    tip: "Cliquez sur les lignes à supprimer puis confirmez",
-    targetId: "tour-remove-line-button",
-    requiredView: "preview",
-  },
-  {
-    id: "download",
-    title: "Télécharger en PDF",
-    description:
-      "Exportez votre document au format PDF pour l'envoyer à vos clients ou l'imprimer.",
-    icon: <Download className="w-5 h-5" />,
-    tip: "Le PDF reprend votre logo et couleur d'accent",
-    targetId: "tour-download-button",
-    requiredView: "preview",
+    tip: "Cliquez sur les éléments à supprimer puis confirmez",
+    targetId: "tour-remove-button",
   },
   {
     id: "customize",
@@ -132,28 +92,6 @@ const tutorialSteps: TutorialStep[] = [
     icon: <Palette className="w-5 h-5" />,
     tip: "Votre logo apparaît automatiquement",
     targetId: "tour-color-button",
-    requiredView: "preview",
-  },
-  {
-    id: "clients",
-    title: "Fiche client",
-    description:
-      "Accédez à la fiche du client pour voir ses informations et l'historique de ses documents.",
-    icon: <Users className="w-5 h-5" />,
-    tip: "Retrouvez facilement tous les documents d'un client",
-    targetId: "tour-client-button",
-    requiredView: "preview",
-  },
-  {
-    id: "convert",
-    title: "Transformer en facture",
-    description:
-      "Une fois le devis accepté, convertissez-le en facture en un clic. Le devis original est conservé.",
-    icon: <Receipt className="w-5 h-5" />,
-    tip: "La facture reprend toutes les informations du devis",
-    targetId: "tour-convert-button",
-    quoteOnly: true,
-    requiredView: "preview",
   },
   {
     id: "signature",
@@ -164,7 +102,34 @@ const tutorialSteps: TutorialStep[] = [
     tip: "Idéal pour une validation rapide sur tablette",
     targetId: "tour-signature-button",
     quoteOnly: true,
-    requiredView: "preview",
+  },
+  {
+    id: "convert",
+    title: "Transformer en facture",
+    description:
+      "Une fois le devis accepté, convertissez-le en facture en un clic. Le devis original est conservé.",
+    icon: <Receipt className="w-5 h-5" />,
+    tip: "La facture reprend toutes les informations du devis",
+    targetId: "tour-convert-button",
+    quoteOnly: true,
+  },
+  {
+    id: "clients",
+    title: "Fiche client",
+    description:
+      "Accédez à la fiche du client pour voir ses informations et l'historique de ses documents.",
+    icon: <Users className="w-5 h-5" />,
+    tip: "Retrouvez facilement tous les documents d'un client",
+    targetId: "tour-client-button",
+  },
+  {
+    id: "download",
+    title: "Télécharger en PDF",
+    description:
+      "Exportez votre document au format PDF pour l'envoyer à vos clients ou l'imprimer.",
+    icon: <Download className="w-5 h-5" />,
+    tip: "Le PDF reprend votre logo et couleur d'accent",
+    targetId: "tour-download-button",
   },
   {
     id: "delete",
@@ -174,7 +139,6 @@ const tutorialSteps: TutorialStep[] = [
     icon: <Trash2 className="w-5 h-5" />,
     tip: "Une confirmation vous sera demandée",
     targetId: "tour-delete-button",
-    requiredView: "preview",
   },
 ];
 
@@ -188,7 +152,6 @@ interface TargetRect {
 interface OnboardingTutorialProps {
   onComplete: () => void;
   documentType?: "quote" | "invoice";
-  onSwitchView?: (view: "chat" | "preview") => void;
 }
 
 const GAP = 16;
@@ -197,7 +160,6 @@ const MARGIN = 12;
 export function OnboardingTutorial({
   onComplete,
   documentType = "quote",
-  onSwitchView,
 }: OnboardingTutorialProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const [isExiting, setIsExiting] = useState(false);
@@ -235,12 +197,6 @@ export function OnboardingTutorial({
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
-
-  useEffect(() => {
-    if (step?.requiredView && onSwitchView) {
-      onSwitchView(step.requiredView);
-    }
-  }, [step?.requiredView, onSwitchView]);
 
   useEffect(() => {
     const tooltipHeight = 280;
@@ -285,24 +241,34 @@ export function OnboardingTutorial({
 
         let bestPosition: TooltipPosition = "bottom";
 
-        if (step.preferredPosition === "top") {
+        const canFitTop = spaceTop >= tooltipHeight + GAP;
+        const canFitBottom = spaceBottom >= tooltipHeight + GAP;
+        const canFitLeft = spaceLeft >= tooltipWidth + GAP;
+        const canFitRight = spaceRight >= tooltipWidth + GAP;
+
+        // Force "top" for elements in the bottom 250px of the screen
+        const isNearBottom = rect.bottom > window.innerHeight - 250;
+
+        if (isNearBottom) {
           bestPosition = "top";
-        } else if (step.preferredPosition === "bottom") {
-          bestPosition = "bottom";
-        } else if (step.preferredPosition === "left") {
-          bestPosition = "left";
-        } else if (step.preferredPosition === "right") {
-          bestPosition = "right";
-        } else if (spaceBottom >= tooltipHeight + GAP) {
-          bestPosition = "bottom";
-        } else if (spaceTop >= tooltipHeight + GAP) {
+        } else if (step.preferredPosition === "top" && canFitTop) {
           bestPosition = "top";
-        } else if (spaceRight >= tooltipWidth + GAP) {
-          bestPosition = "right";
-        } else if (spaceLeft >= tooltipWidth + GAP) {
+        } else if (step.preferredPosition === "bottom" && canFitBottom) {
+          bestPosition = "bottom";
+        } else if (step.preferredPosition === "left" && canFitLeft) {
           bestPosition = "left";
+        } else if (step.preferredPosition === "right" && canFitRight) {
+          bestPosition = "right";
+        } else if (canFitTop) {
+          bestPosition = "top";
+        } else if (canFitBottom) {
+          bestPosition = "bottom";
+        } else if (canFitLeft) {
+          bestPosition = "left";
+        } else if (canFitRight) {
+          bestPosition = "right";
         } else {
-          bestPosition = "bottom";
+          bestPosition = "top";
         }
 
         setComputedPosition(bestPosition);
@@ -374,10 +340,12 @@ export function OnboardingTutorial({
     );
 
     if (computedPosition === "top") {
-      const tooltipBottom = window.innerHeight - targetRect.top + GAP;
+      // Position tooltip well above the target (extra 40px buffer for text wrapping)
+      const tooltipTop = targetRect.top - tooltipHeight - 40;
+      const safeTop = Math.max(MARGIN, tooltipTop);
       return {
         position: "fixed",
-        bottom: tooltipBottom,
+        top: safeTop,
         left: tooltipLeft,
         width: tooltipWidth,
         maxWidth: `calc(100vw - ${MARGIN * 2}px)`,

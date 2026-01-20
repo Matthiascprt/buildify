@@ -2,28 +2,29 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
-import { Send, Mic, MicOff } from "lucide-react";
 import { pdf } from "@react-pdf/renderer";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Chat, type ChatRef } from "@/components/edition/chat";
+import { Chat, type ChatRef, type QuotaInfo } from "@/components/edition/chat";
+import { ChatWidget } from "@/components/edition/chat-widget";
 import { DocumentPreview } from "@/components/edition/document-preview";
 import { QuotePDFTemplate } from "@/components/edition/quote-pdf-template";
 import { InvoicePDFTemplate } from "@/components/edition/invoice-pdf-template";
 import { OnboardingTutorial } from "@/components/edition/onboarding-tutorial";
 import type {
   DocumentData,
-  LineItem,
   QuoteData,
   InvoiceData,
+  Section,
+  LineItem,
 } from "@/lib/types/document";
 import {
   calculateTotals,
   calculateLineTotal,
+  calculateSubsectionTotal,
+  calculateSectionTotal,
   convertQuoteToInvoice,
-  recalculateSectionTotals,
+  recalculateAllTotals,
   documentDataToContent,
-  generateLineId,
+  generateId,
 } from "@/lib/types/document";
 import type { Company, Client } from "@/lib/supabase/types";
 
@@ -35,6 +36,7 @@ interface EditionClientProps {
   initialNextInvoiceNumber: string;
   initialDocument?: DocumentData | null;
   initialAccentColor?: string | null;
+  initialQuota: QuotaInfo;
 }
 
 export function EditionClient({
@@ -45,11 +47,13 @@ export function EditionClient({
   initialNextInvoiceNumber,
   initialDocument = null,
   initialAccentColor = null,
+  initialQuota,
 }: EditionClientProps) {
   const [document, setDocument] = useState<DocumentData | null>(
     initialDocument,
   );
   const [clients, setClients] = useState<Client[]>(initialClients);
+  const [quota, setQuota] = useState<QuotaInfo>(initialQuota);
   const [nextQuoteNumber, setNextQuoteNumber] = useState(
     initialNextQuoteNumber,
   );
@@ -59,8 +63,8 @@ export function EditionClient({
   const [accentColor, setAccentColor] = useState<string | null>(
     initialAccentColor,
   );
-  const [mobileView, setMobileView] = useState<"chat" | "preview">("chat");
   const [showTutorial, setShowTutorial] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
   const chatRef = useRef<ChatRef>(null);
   const searchParams = useSearchParams();
 
@@ -261,39 +265,77 @@ export function EditionClient({
         const updated = { ...prev };
         const parts = path.split(".");
 
-        if (parts[0] === "items" && parts.length >= 3) {
-          const index = parseInt(parts[1], 10);
+        // Handle hierarchical paths: sections.{id}.label, subsections.{id}.label, lines.{id}.{field}
+        if (parts[0] === "sections" && parts.length === 3) {
+          const sectionId = parts[1];
+          // parts[2] is the field name (e.g., "label")
+          updated.sections = prev.sections.map((section) =>
+            section.sectionId === sectionId
+              ? { ...section, sectionLabel: String(value) }
+              : section,
+          );
+        } else if (parts[0] === "subsections" && parts.length === 3) {
+          const subsectionId = parts[1];
+          updated.sections = prev.sections.map((section) => ({
+            ...section,
+            subsections: section.subsections.map((subsection) =>
+              subsection.subsectionId === subsectionId
+                ? { ...subsection, subsectionLabel: String(value) }
+                : subsection,
+            ),
+          }));
+        } else if (parts[0] === "lines" && parts.length === 3) {
+          const lineId = parts[1];
           const field = parts[2];
-          const items = [...prev.items];
-          const item = { ...items[index] };
+          updated.sections = prev.sections.map((section) => ({
+            ...section,
+            subsections: section.subsections.map((subsection) => {
+              const updatedLines = subsection.lines.map((line) => {
+                if (line.lineId !== lineId) return line;
 
-          (item as Record<string, unknown>)[field] = value;
+                const updatedLine = { ...line };
+                if (field === "designation") {
+                  updatedLine.designation = String(value);
+                } else if (field === "description") {
+                  updatedLine.description = String(value);
+                } else if (field === "quantity") {
+                  updatedLine.quantity =
+                    typeof value === "number" ? value : parseFloat(value) || 0;
+                  updatedLine.totalHT = calculateLineTotal(
+                    updatedLine.quantity,
+                    updatedLine.unitPriceHT,
+                  );
+                } else if (field === "unitPriceHT") {
+                  updatedLine.unitPriceHT =
+                    typeof value === "number" ? value : parseFloat(value) || 0;
+                  updatedLine.totalHT = calculateLineTotal(
+                    updatedLine.quantity,
+                    updatedLine.unitPriceHT,
+                  );
+                } else if (field === "vatRate") {
+                  updatedLine.vatRate =
+                    typeof value === "number" ? value : parseFloat(value) || 0;
+                }
+                return updatedLine;
+              });
 
-          if (
-            !item.isSection &&
-            (field === "unitPrice" || field === "tva" || field === "quantity")
-          ) {
-            const qty = parseFloat(
-              String(field === "quantity" ? value : item.quantity)?.replace(
-                /[^\d.]/g,
-                "",
-              ) || "0",
-            );
-            const price =
-              field === "unitPrice" ? (value as number) : item.unitPrice || 0;
-            item.total = calculateLineTotal(qty, price);
+              return {
+                ...subsection,
+                lines: updatedLines,
+                totalHT: calculateSubsectionTotal(updatedLines),
+              };
+            }),
+          }));
 
-            if (field === "tva") {
-              updated.tvaRate = value as number;
-            }
-          }
+          // Recalculate section totals
+          updated.sections = updated.sections.map((section) => ({
+            ...section,
+            totalHT: calculateSectionTotal(section.subsections),
+          }));
 
-          items[index] = item;
-          const recalculatedItems = recalculateSectionTotals(items);
-          updated.items = recalculatedItems;
-
+          // Recalculate document totals
           const totals = calculateTotals(
-            recalculatedItems,
+            updated.sections,
             updated.tvaRate,
             updated.deposit,
           );
@@ -305,7 +347,7 @@ export function EditionClient({
         } else if (path === "tvaRate" || path === "deposit") {
           (updated as Record<string, unknown>)[path] = value;
           const totals = calculateTotals(
-            updated.items,
+            updated.sections,
             path === "tvaRate" ? (value as number) : updated.tvaRate,
             path === "deposit" ? (value as number) : updated.deposit,
           );
@@ -351,7 +393,8 @@ export function EditionClient({
       }
     }
 
-    setDocument(null);
+    // Redirect to fresh edition page with full reload
+    window.location.href = "/edition";
     return { success: true };
   };
 
@@ -423,72 +466,271 @@ export function EditionClient({
     setDocument((prev) => {
       if (!prev) return prev;
 
-      const nonSectionItems = prev.items.filter((item) => !item.isSection);
-      const sections = prev.items.filter((item) => item.isSection);
-      const lastSection = sections[sections.length - 1];
+      let sections = prev.sections.map((s) => ({
+        ...s,
+        subsections: s.subsections.map((sub) => ({
+          ...sub,
+          lines: [...sub.lines],
+        })),
+      }));
 
-      // Numéro d'affichage (pas l'identifiant technique)
-      let displayId: string;
-      if (lastSection) {
-        const sectionNumber = lastSection.id;
-        const sectionItems = prev.items.filter(
-          (item) => !item.isSection && item.id.startsWith(`${sectionNumber}.`),
-        );
-        displayId = `${sectionNumber}.${sectionItems.length + 1}`;
-      } else {
-        displayId = `${nonSectionItems.length + 1}`;
+      // If no sections exist, create a default section with a subsection
+      if (sections.length === 0) {
+        const newSection: Section = {
+          sectionId: generateId(),
+          sectionNumber: "1",
+          sectionLabel: "Section 1",
+          totalHT: 0,
+          subsections: [
+            {
+              subsectionId: generateId(),
+              subsectionNumber: "1.1",
+              subsectionLabel: "Sous-section 1.1",
+              totalHT: 0,
+              lines: [],
+            },
+          ],
+        };
+        sections = [newSection];
       }
 
+      // Get last section and subsection
+      const lastSectionIndex = sections.length - 1;
+      const lastSection = sections[lastSectionIndex];
+
+      if (lastSection.subsections.length === 0) {
+        // Add a default subsection if none exists
+        sections[lastSectionIndex] = {
+          ...lastSection,
+          subsections: [
+            {
+              subsectionId: generateId(),
+              subsectionNumber: `${lastSection.sectionNumber}.1`,
+              subsectionLabel: `Sous-section ${lastSection.sectionNumber}.1`,
+              totalHT: 0,
+              lines: [],
+            },
+          ],
+        };
+      }
+
+      const updatedLastSection = sections[lastSectionIndex];
+      const lastSubsectionIndex = updatedLastSection.subsections.length - 1;
+      const lastSubsection =
+        updatedLastSection.subsections[lastSubsectionIndex];
+      const lineCount = lastSubsection.lines.length;
+      const lineNumber = `${lastSubsection.subsectionNumber}.${lineCount + 1}`;
+
       const newLine: LineItem = {
-        lineId: generateLineId(), // UUID stable et unique
-        id: displayId, // Numéro d'affichage uniquement
+        lineId: generateId(),
+        lineNumber,
         designation: "",
         description: "",
-        quantity: "1",
-        unitPrice: 0,
-        tva: prev.tvaRate,
-        total: 0,
-        isSection: false,
+        quantity: 1,
+        unitPriceHT: 0,
+        vatRate: prev.tvaRate,
+        totalHT: 0,
       };
 
-      const newItems = [...prev.items, newLine];
-      const recalculatedItems = recalculateSectionTotals(newItems);
+      // Add line to last subsection (immutably)
+      sections[lastSectionIndex] = {
+        ...updatedLastSection,
+        subsections: updatedLastSection.subsections.map((sub, idx) =>
+          idx === lastSubsectionIndex
+            ? { ...sub, lines: [...sub.lines, newLine] }
+            : sub,
+        ),
+      };
+
+      // Recalculate totals
+      const recalculatedSections = recalculateAllTotals(sections);
       const totals = calculateTotals(
-        recalculatedItems,
+        recalculatedSections,
         prev.tvaRate,
         prev.deposit,
       );
 
       return {
         ...prev,
-        items: recalculatedItems,
+        sections: recalculatedSections,
         ...totals,
       };
     });
   }, [document]);
 
-  const handleRemoveLines = useCallback(
-    (lineIndices: number[]) => {
-      if (!document || lineIndices.length === 0) return;
+  const handleAddSection = useCallback(() => {
+    if (!document) return;
+
+    setDocument((prev) => {
+      if (!prev) return prev;
+
+      const sectionNumber = String(prev.sections.length + 1);
+      const subsectionNumber = `${sectionNumber}.1`;
+      const lineNumber = `${subsectionNumber}.1`;
+
+      const newLine: LineItem = {
+        lineId: generateId(),
+        lineNumber,
+        designation: "",
+        description: "",
+        quantity: 1,
+        unitPriceHT: 0,
+        vatRate: prev.tvaRate,
+        totalHT: 0,
+      };
+
+      const newSection: Section = {
+        sectionId: generateId(),
+        sectionNumber,
+        sectionLabel: `Section ${sectionNumber}`,
+        totalHT: 0,
+        subsections: [
+          {
+            subsectionId: generateId(),
+            subsectionNumber,
+            subsectionLabel: `Sous-section ${subsectionNumber}`,
+            totalHT: 0,
+            lines: [newLine],
+          },
+        ],
+      };
+
+      return {
+        ...prev,
+        sections: [...prev.sections, newSection],
+      };
+    });
+  }, [document]);
+
+  const handleAddSubsection = useCallback(() => {
+    if (!document) return;
+
+    setDocument((prev) => {
+      if (!prev) return prev;
+
+      let sections = [...prev.sections];
+
+      // If no sections exist, create one first
+      if (sections.length === 0) {
+        const newSection: Section = {
+          sectionId: generateId(),
+          sectionNumber: "1",
+          sectionLabel: "Section 1",
+          totalHT: 0,
+          subsections: [],
+        };
+        sections = [newSection];
+      }
+
+      // Add subsection to the last section
+      const lastSectionIndex = sections.length - 1;
+      const lastSection = sections[lastSectionIndex];
+      const subsectionNumber = `${lastSection.sectionNumber}.${lastSection.subsections.length + 1}`;
+      const lineNumber = `${subsectionNumber}.1`;
+
+      const newLine: LineItem = {
+        lineId: generateId(),
+        lineNumber,
+        designation: "",
+        description: "",
+        quantity: 1,
+        unitPriceHT: 0,
+        vatRate: prev.tvaRate,
+        totalHT: 0,
+      };
+
+      const newSubsection = {
+        subsectionId: generateId(),
+        subsectionNumber,
+        subsectionLabel: `Sous-section ${subsectionNumber}`,
+        totalHT: 0,
+        lines: [newLine],
+      };
+
+      sections[lastSectionIndex] = {
+        ...lastSection,
+        subsections: [...lastSection.subsections, newSubsection],
+      };
+
+      return {
+        ...prev,
+        sections,
+      };
+    });
+  }, [document]);
+
+  type SelectedItem = {
+    type: "section" | "subsection" | "line";
+    id: string;
+    sectionId?: string;
+    subsectionId?: string;
+  };
+
+  const handleRemoveItems = useCallback(
+    (items: SelectedItem[]) => {
+      if (!document || items.length === 0) return;
 
       setDocument((prev) => {
         if (!prev) return prev;
 
-        // Trier les indices en ordre décroissant pour supprimer de la fin
-        const sortedIndices = [...lineIndices].sort((a, b) => b - a);
-        const indexSet = new Set(sortedIndices);
+        const sectionIds = new Set(
+          items.filter((i) => i.type === "section").map((i) => i.id),
+        );
+        const subsectionIds = new Set(
+          items.filter((i) => i.type === "subsection").map((i) => i.id),
+        );
+        const lineIds = new Set(
+          items.filter((i) => i.type === "line").map((i) => i.id),
+        );
 
-        const newItems = prev.items.filter((_, index) => !indexSet.has(index));
-        const recalculatedItems = recalculateSectionTotals(newItems);
+        // Filter out deleted sections, subsections, and lines
+        let updatedSections = prev.sections
+          .filter((section) => !sectionIds.has(section.sectionId))
+          .map((section) => ({
+            ...section,
+            subsections: section.subsections
+              .filter(
+                (subsection) => !subsectionIds.has(subsection.subsectionId),
+              )
+              .map((subsection) => ({
+                ...subsection,
+                lines: subsection.lines.filter(
+                  (line) => !lineIds.has(line.lineId),
+                ),
+              })),
+          }));
+
+        // Renumber sections and their children
+        updatedSections = updatedSections.map((section, sIdx) => {
+          const newSectionNumber = String(sIdx + 1);
+          return {
+            ...section,
+            sectionNumber: newSectionNumber,
+            subsections: section.subsections.map((subsection, ssIdx) => {
+              const newSubsectionNumber = `${newSectionNumber}.${ssIdx + 1}`;
+              return {
+                ...subsection,
+                subsectionNumber: newSubsectionNumber,
+                lines: subsection.lines.map((line, lIdx) => ({
+                  ...line,
+                  lineNumber: `${newSubsectionNumber}.${lIdx + 1}`,
+                })),
+              };
+            }),
+          };
+        });
+
+        // Recalculate totals
+        const recalculatedSections = recalculateAllTotals(updatedSections);
         const totals = calculateTotals(
-          recalculatedItems,
+          recalculatedSections,
           prev.tvaRate,
           prev.deposit,
         );
 
         return {
           ...prev,
-          items: recalculatedItems,
+          sections: recalculatedSections,
           ...totals,
         };
       });
@@ -519,6 +761,7 @@ export function EditionClient({
         phone: doc.company.phone,
         email: doc.company.email,
         siret: doc.company.siret,
+        rcs: doc.company.rcs,
         logoUrl: doc.company.logoUrl,
         paymentTerms: doc.company.paymentTerms,
         legalNotice: doc.company.legalNotice,
@@ -532,7 +775,7 @@ export function EditionClient({
         siret: doc.client.siret,
       },
       projectTitle: doc.projectTitle,
-      items: doc.items,
+      sections: doc.sections,
       totalHT: doc.totalHT,
       tvaRate: doc.tvaRate,
       tvaAmount: doc.tvaAmount,
@@ -552,6 +795,7 @@ export function EditionClient({
         phone: doc.company.phone,
         email: doc.company.email,
         siret: doc.company.siret,
+        rcs: doc.company.rcs,
         logoUrl: doc.company.logoUrl,
         paymentTerms: doc.company.paymentTerms,
         legalNotice: doc.company.legalNotice,
@@ -565,7 +809,7 @@ export function EditionClient({
         siret: doc.client.siret,
       },
       projectTitle: doc.projectTitle,
-      items: doc.items,
+      sections: doc.sections,
       totalHT: doc.totalHT,
       tvaRate: doc.tvaRate,
       tvaAmount: doc.tvaAmount,
@@ -608,136 +852,18 @@ export function EditionClient({
     }
   }, [document, accentColor]);
 
-  // Mobile chat input state
-  const [mobileInput, setMobileInput] = useState("");
-  const [isMobileRecording, setIsMobileRecording] = useState(false);
-  const mobileRecognitionRef = useRef<SpeechRecognition | null>(null);
-
-  const handleMobileSendMessage = useCallback(async () => {
-    if (!mobileInput.trim() || chatRef.current?.isLoading || !document) return;
-
-    const messageContent = mobileInput.trim();
-    setMobileInput("");
-
-    // Use the Chat component's sendMessage via ref to keep messages synchronized
-    await chatRef.current?.sendMessage(messageContent);
-  }, [mobileInput, document]);
-
-  const toggleMobileRecording = useCallback(() => {
-    if (isMobileRecording) {
-      if (mobileRecognitionRef.current) {
-        mobileRecognitionRef.current.stop();
-        mobileRecognitionRef.current = null;
-      }
-      setIsMobileRecording(false);
-    } else {
-      if (
-        !("webkitSpeechRecognition" in window) &&
-        !("SpeechRecognition" in window)
-      ) {
-        return;
-      }
-
-      const SpeechRecognitionAPI =
-        window.SpeechRecognition || window.webkitSpeechRecognition;
-      const recognition = new SpeechRecognitionAPI();
-
-      recognition.lang = "fr-FR";
-      recognition.continuous = true;
-      recognition.interimResults = true;
-
-      recognition.onstart = () => setIsMobileRecording(true);
-      recognition.onresult = (event: SpeechRecognitionEvent) => {
-        let finalTranscript = "";
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          if (event.results[i].isFinal) {
-            finalTranscript += event.results[i][0].transcript;
-          }
-        }
-        if (finalTranscript) {
-          setMobileInput((prev) => prev + (prev ? " " : "") + finalTranscript);
-        }
-      };
-      recognition.onerror = () => {
-        setIsMobileRecording(false);
-        mobileRecognitionRef.current = null;
-      };
-      recognition.onend = () => setIsMobileRecording(false);
-
-      mobileRecognitionRef.current = recognition;
-      recognition.start();
-    }
-  }, [isMobileRecording]);
-
-  const mobileInputComponent = (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        handleMobileSendMessage();
-      }}
-      className="p-4"
-    >
-      <div className="flex gap-2">
-        <Button
-          type="button"
-          variant={isMobileRecording ? "destructive" : "outline"}
-          size="icon"
-          className={`shrink-0 ${isMobileRecording ? "animate-pulse" : ""}`}
-          onClick={toggleMobileRecording}
-        >
-          {isMobileRecording ? (
-            <MicOff className="h-4 w-4" />
-          ) : (
-            <Mic className="h-4 w-4" />
-          )}
-        </Button>
-        <Textarea
-          value={mobileInput}
-          onChange={(e) => setMobileInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              handleMobileSendMessage();
-            }
-          }}
-          placeholder="Modifier le document..."
-          className="min-h-10 max-h-32 resize-none"
-          rows={1}
-        />
-        <Button
-          type="submit"
-          size="icon"
-          disabled={!mobileInput.trim() || chatRef.current?.isLoading}
-        >
-          <Send className="h-4 w-4" />
-        </Button>
-      </div>
-    </form>
-  );
-
-  // Hide document preview in initial state (no document)
-  const showDocumentPreview = document !== null;
-
   return (
     <>
       {showTutorial && (
         <OnboardingTutorial
           documentType={document?.type}
           onComplete={() => setShowTutorial(false)}
-          onSwitchView={setMobileView}
         />
       )}
-      <div
-        className={`grid h-full grid-cols-1 ${showDocumentPreview ? "2xl:grid-cols-2" : ""} overflow-hidden`}
-      >
-        {/* Chat - visible on desktop (2xl+), or on smaller screens when mobileView is "chat" */}
-        <div
-          className={`h-full overflow-hidden ${showDocumentPreview ? "2xl:border-r" : ""} ${
-            showDocumentPreview && mobileView === "preview"
-              ? "hidden 2xl:block"
-              : ""
-          }`}
-        >
+
+      <div className="h-full overflow-hidden">
+        {/* Welcome screen when no document */}
+        {!document && (
           <Chat
             ref={chatRef}
             userInitial={userInitial}
@@ -751,36 +877,61 @@ export function EditionClient({
             accentColor={accentColor}
             onAccentColorChange={handleAccentColorChange}
             onClientCreated={handleClientCreated}
-            onSwitchToPreview={() => setMobileView("preview")}
             onDownloadPdf={handleDownloadPdf}
             onConvertToInvoice={handleConvertToInvoice}
+            quota={quota}
+            onQuotaChange={setQuota}
           />
-        </div>
+        )}
 
-        {/* Document Preview - visible on desktop (2xl+), or on smaller screens when mobileView is "preview" */}
-        {showDocumentPreview && (
-          <div
-            className={`h-full overflow-hidden ${
-              mobileView === "chat" ? "hidden 2xl:block" : ""
-            }`}
-          >
-            <DocumentPreview
+        {/* Full-page document preview when document exists */}
+        {document && (
+          <>
+            <div
+              className={`h-full transition-all duration-200 ${isChatOpen ? "blur-[12px] sm:blur-none brightness-[0.98] sm:brightness-100 cursor-pointer sm:cursor-default" : ""}`}
+              onClick={() => isChatOpen && setIsChatOpen(false)}
+            >
+              <DocumentPreview
+                document={document}
+                onDeleteDocument={handleDeleteDocument}
+                onDocumentUpdate={handleDocumentUpdate}
+                onDocumentChange={handleDocumentChange}
+                onConvertToInvoice={handleConvertToInvoice}
+                onAddSection={handleAddSection}
+                onAddSubsection={handleAddSubsection}
+                onAddLine={handleAddLine}
+                onRemoveItems={handleRemoveItems}
+                accentColor={accentColor}
+                onAccentColorChange={handleAccentColorChange}
+                clientSyncError={clientSyncError}
+                onClientSyncErrorClear={() => setClientSyncError(null)}
+                isSaving={isSaving}
+                clients={clients}
+                onClientCreated={handleClientCreated}
+              />
+            </div>
+
+            {/* Floating chat widget */}
+            <ChatWidget
+              isOpen={isChatOpen}
+              onOpenChange={setIsChatOpen}
+              userInitial={userInitial}
+              company={company}
+              clients={clients}
               document={document}
-              onDeleteDocument={handleDeleteDocument}
-              onDocumentUpdate={handleDocumentUpdate}
-              onConvertToInvoice={handleConvertToInvoice}
-              onAddLine={handleAddLine}
-              onRemoveLines={handleRemoveLines}
+              onDocumentChange={handleDocumentChange}
+              nextQuoteNumber={nextQuoteNumber}
+              nextInvoiceNumber={nextInvoiceNumber}
+              isEditingExisting={!!initialDocument}
               accentColor={accentColor}
               onAccentColorChange={handleAccentColorChange}
-              clientSyncError={clientSyncError}
-              onClientSyncErrorClear={() => setClientSyncError(null)}
-              isSaving={isSaving}
-              showMobileInput={mobileView === "preview"}
-              mobileInputComponent={mobileInputComponent}
-              onSwitchToChat={() => setMobileView("chat")}
+              onClientCreated={handleClientCreated}
+              onDownloadPdf={handleDownloadPdf}
+              onConvertToInvoice={handleConvertToInvoice}
+              quota={quota}
+              onQuotaChange={setQuota}
             />
-          </div>
+          </>
         )}
       </div>
     </>

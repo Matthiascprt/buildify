@@ -19,6 +19,7 @@ export type Company = {
   email: string | null;
   phone: string | null;
   siret: string | null;
+  rcs: string | null;
   vat_rate: number | null;
   logo_url: string | null;
   payment_terms: string | null;
@@ -50,29 +51,50 @@ export type CompanyUpdate = Partial<
 // DOCUMENTS (Quotes & Invoices)
 // ============================================
 
-// Structure JSONB content
+// Structure JSONB content - Format hiérarchique
+// SECTION → SOUS-SECTION → PRESTATION
+
+export type LineType = "service" | "material";
+
 export interface DocumentLine {
-  line_id: string; // UUID stable - NE JAMAIS utiliser line_number pour identifier
-  line_number: number; // Numéro d'affichage uniquement
+  line_id: string;
+  line_number: string; // "1.1.1", "1.1.2", etc.
   designation: string;
   description?: string;
+  line_type?: LineType; // "service" (main-d'œuvre) or "material" (fourniture)
   quantity: number;
+  unit?: string; // "m²", "m", "h", "u", "kg", "L", etc.
   unit_price_ht: number;
   vat_rate: number;
-  total_ttc: number;
-  is_section?: boolean;
+  total_ht: number; // quantity × unit_price_ht
+}
+
+export interface DocumentSubsection {
+  subsection_id: string;
+  subsection_number: string; // "1.1", "1.2", etc.
+  subsection_label: string;
+  total_ht: number; // Somme des lignes
+  lines: DocumentLine[];
+}
+
+export interface DocumentSection {
+  section_id: string;
+  section_number: string; // "1", "2", etc.
+  section_label: string;
+  total_ht: number; // Somme des sous-sections
+  subsections: DocumentSubsection[];
 }
 
 export interface DocumentTotals {
   total_ht: number;
   total_vat: number;
-  deposit: number;
   total_ttc: number;
+  deposit: number;
 }
 
 export interface DocumentContent {
   project_title: string;
-  lines: DocumentLine[];
+  sections: DocumentSection[];
   totals: DocumentTotals;
   signature?: string;
 }
@@ -168,3 +190,42 @@ export interface AdvancedDashboardStats {
   todayClients: TodayClient[];
   todayDocuments: RecentActivity[];
 }
+
+// ============================================
+// SUBSCRIPTIONS
+// ============================================
+
+export type SubscriptionStatus =
+  | "active"
+  | "trialing"
+  | "past_due"
+  | "canceled"
+  | "incomplete"
+  | "incomplete_expired"
+  | "unpaid";
+
+export type Subscription = {
+  profile_id: string;
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  stripe_price_id: string | null;
+  status: SubscriptionStatus | null;
+  trial_end: string | null;
+  current_period_start: string | null;
+  current_period_end: string | null;
+  cancel_at_period_end: boolean | null;
+  canceled_at: string | null;
+  plan: "standard" | "pro" | null;
+  quota_docs_per_period: number | null;
+  usage_docs_current_period: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SubscriptionInsert = Omit<
+  Subscription,
+  "created_at" | "updated_at"
+>;
+export type SubscriptionUpdate = Partial<
+  Omit<Subscription, "profile_id" | "created_at" | "updated_at">
+>;

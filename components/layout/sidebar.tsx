@@ -14,7 +14,8 @@ import {
   LogOut,
   Pencil,
   CreditCard,
-  Scale,
+  HelpCircle,
+  Mail,
   type LucideIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -123,23 +124,29 @@ function AccountMenu({
     { value: "dark", label: "Sombre", icon: Moon },
   ] as const;
 
+  const triggerButton = (
+    <button className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-sidebar-accent/50 text-left">
+      <Avatar className="h-8 w-8">
+        <AvatarFallback className="bg-sidebar-accent text-sidebar-accent-foreground text-xs font-medium">
+          {initials}
+        </AvatarFallback>
+      </Avatar>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-sidebar-foreground truncate">
+          {user?.email || "Utilisateur"}
+        </p>
+        <p className="text-xs text-sidebar-foreground/60">Mon compte</p>
+      </div>
+    </button>
+  );
+
+  if (!mounted) {
+    return triggerButton;
+  }
+
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-sidebar-accent/50 text-left">
-          <Avatar className="h-8 w-8">
-            <AvatarFallback className="bg-sidebar-accent text-sidebar-accent-foreground text-xs font-medium">
-              {initials}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-sidebar-foreground truncate">
-              {user?.email || "Utilisateur"}
-            </p>
-            <p className="text-xs text-sidebar-foreground/60">Mon compte</p>
-          </div>
-        </button>
-      </DropdownMenuTrigger>
+      <DropdownMenuTrigger asChild>{triggerButton}</DropdownMenuTrigger>
       <DropdownMenuContent side="top" align="start" className="w-52">
         <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">
           Thème
@@ -175,9 +182,15 @@ function AccountMenu({
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
-          <Link href="/legal" className="cursor-pointer">
-            <Scale className="h-4 w-4" />
-            Légal
+          <Link href="/help/contact" className="cursor-pointer">
+            <Mail className="h-4 w-4" />
+            Contact
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href="/help" className="cursor-pointer">
+            <HelpCircle className="h-4 w-4" />
+            Aide
           </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
@@ -196,18 +209,9 @@ function AccountMenu({
 
 export function Sidebar({ user }: SidebarProps) {
   const pathname = usePathname();
-  const { resolvedTheme } = useTheme();
-  const [mounted, setMounted] = React.useState(false);
   const initials = user?.email?.slice(0, 2).toUpperCase() || "U";
 
-  React.useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  const logoUrl =
-    mounted && resolvedTheme === "dark"
-      ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/buildify-assets/Logo/icon (2).svg`
-      : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/buildify-assets/Logo/icon (1).svg`;
+  const logoUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/buildify-assets/Logo/Logo02.svg`;
 
   return (
     <aside className="hidden lg:flex fixed inset-y-0 left-0 z-40 w-60 flex-col bg-sidebar">
@@ -218,7 +222,7 @@ export function Sidebar({ user }: SidebarProps) {
             alt="Buildify"
             width={32}
             height={32}
-            className="flex-shrink-0"
+            className="flex-shrink-0 drop-shadow-sm"
             unoptimized
           />
           <span className="text-2xl font-bold tracking-tight text-sidebar-foreground">
@@ -360,68 +364,85 @@ export function BottomNav({ user }: SidebarProps) {
         })}
 
         {/* Menu compte */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className="flex flex-col items-center justify-center gap-1 py-2 px-1 min-w-0 flex-1 text-muted-foreground">
-              <Avatar className="h-5 w-5">
-                <AvatarFallback className="bg-muted text-muted-foreground text-[8px] font-medium">
-                  {initials}
-                </AvatarFallback>
-              </Avatar>
-              <span className="text-[10px] font-medium">Compte</span>
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent side="top" align="end" className="w-52 mb-2">
-            <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">
-              Thème
-            </DropdownMenuLabel>
-            <div className="flex gap-2 px-3 pb-3">
-              {themes.map(({ value, label, icon: Icon }) => (
-                <button
-                  key={value}
-                  onClick={() => syncTheme(value as "light" | "dark")}
-                  className={cn(
-                    "flex flex-1 flex-col items-center justify-center gap-2 rounded-md px-2.5 py-2.5 text-xs transition-colors min-w-0 w-0",
-                    mounted && theme === value
-                      ? "bg-accent text-accent-foreground"
-                      : "hover:bg-accent/50",
-                  )}
-                >
-                  <Icon className="h-4 w-4 flex-shrink-0" />
-                  <span className="text-center leading-tight">{label}</span>
-                </button>
-              ))}
-            </div>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <Link href="/settings" className="cursor-pointer">
-                <Settings className="h-4 w-4" />
-                Paramètres
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href="/billing" className="cursor-pointer">
-                <CreditCard className="h-4 w-4" />
-                Abonnement
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href="/legal" className="cursor-pointer">
-                <Scale className="h-4 w-4" />
-                Légal
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={handleSignOut}
-              variant="destructive"
-              className="cursor-pointer"
-            >
-              <LogOut className="h-4 w-4" />
-              Déconnexion
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {mounted ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="flex flex-col items-center justify-center gap-1 py-2 px-1 min-w-0 flex-1 text-muted-foreground">
+                <Avatar className="h-5 w-5">
+                  <AvatarFallback className="bg-muted text-muted-foreground text-[8px] font-medium">
+                    {initials}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="text-[10px] font-medium">Compte</span>
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent side="top" align="end" className="w-52 mb-2">
+              <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">
+                Thème
+              </DropdownMenuLabel>
+              <div className="flex gap-2 px-3 pb-3">
+                {themes.map(({ value, label, icon: Icon }) => (
+                  <button
+                    key={value}
+                    onClick={() => syncTheme(value as "light" | "dark")}
+                    className={cn(
+                      "flex flex-1 flex-col items-center justify-center gap-2 rounded-md px-2.5 py-2.5 text-xs transition-colors min-w-0 w-0",
+                      theme === value
+                        ? "bg-accent text-accent-foreground"
+                        : "hover:bg-accent/50",
+                    )}
+                  >
+                    <Icon className="h-4 w-4 flex-shrink-0" />
+                    <span className="text-center leading-tight">{label}</span>
+                  </button>
+                ))}
+              </div>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link href="/settings" className="cursor-pointer">
+                  <Settings className="h-4 w-4" />
+                  Paramètres
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/billing" className="cursor-pointer">
+                  <CreditCard className="h-4 w-4" />
+                  Abonnement
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/help/contact" className="cursor-pointer">
+                  <Mail className="h-4 w-4" />
+                  Contact
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/help" className="cursor-pointer">
+                  <HelpCircle className="h-4 w-4" />
+                  Aide
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={handleSignOut}
+                variant="destructive"
+                className="cursor-pointer"
+              >
+                <LogOut className="h-4 w-4" />
+                Déconnexion
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <button className="flex flex-col items-center justify-center gap-1 py-2 px-1 min-w-0 flex-1 text-muted-foreground">
+            <Avatar className="h-5 w-5">
+              <AvatarFallback className="bg-muted text-muted-foreground text-[8px] font-medium">
+                {initials}
+              </AvatarFallback>
+            </Avatar>
+            <span className="text-[10px] font-medium">Compte</span>
+          </button>
+        )}
       </div>
     </nav>
   );

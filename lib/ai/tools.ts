@@ -1,6 +1,16 @@
 import type { ChatCompletionTool } from "openai/resources/chat/completions";
-import type { DocumentData, LineItem } from "@/lib/types/document";
-import { generateLineId, calculateTotals } from "@/lib/types/document";
+import type {
+  DocumentData,
+  Section,
+  Subsection,
+  LineItem,
+} from "@/lib/types/document";
+import {
+  calculateTotals,
+  calculateLineTotal,
+  calculateSubsectionTotal,
+  calculateSectionTotal,
+} from "@/lib/types/document";
 import type { Client } from "@/lib/supabase/types";
 import {
   findOrCreateClient,
@@ -11,70 +21,289 @@ export const documentTools: ChatCompletionTool[] = [
   {
     type: "function",
     function: {
-      name: "update_document_lines",
+      name: "update_document_content",
       description:
-        "Add, modify, or update lines in the document. Use this to add new items, fill empty lines, or modify existing lines. Always fill empty lines first before creating new ones.",
+        "Outil principal pour modifier le contenu du document. Permet d'ajouter, modifier ou supprimer des sections, sous-sections et lignes. Structure obligatoire: Section → Sous-section → Ligne. Prioriser la réutilisation des éléments vides ou génériques avant d'en créer de nouveaux. Chaque ligne doit avoir designation, description (6-12 mots) et line_type (service/material).",
       parameters: {
         type: "object",
         properties: {
-          lines_to_add: {
+          sections_to_add: {
             type: "array",
             description:
-              "New lines to add to the document. Generate a UUID for each line_id.",
+              "Nouvelles sections à ajouter. Chaque section doit contenir au moins une sous-section avec une ligne.",
             items: {
               type: "object",
               properties: {
-                line_id: {
+                section_id: {
                   type: "string",
-                  description: "UUID for the line. Generate a new UUID.",
+                  description:
+                    "UUID unique pour la section. Générer un nouveau UUID.",
                 },
-                designation: { type: "string", description: "Line title" },
-                description: {
+                section_number: {
                   type: "string",
-                  description: "Optional description",
+                  description: 'Numéro de section (ex: "1", "2")',
                 },
-                quantity: { type: "number", description: "Quantity" },
-                unit_price_ht: {
-                  type: "number",
-                  description: "Unit price HT (excluding tax)",
+                section_label: {
+                  type: "string",
+                  description:
+                    'Nom de la section (ex: "Électricité", "Plomberie")',
                 },
-                vat_rate: {
-                  type: "number",
-                  description: "VAT rate percentage (default 10)",
-                },
-                is_section: {
-                  type: "boolean",
-                  description: "True if this is a section header",
+                subsections: {
+                  type: "array",
+                  description:
+                    "Sous-sections de cette section. Au moins une obligatoire.",
+                  items: {
+                    type: "object",
+                    properties: {
+                      subsection_id: { type: "string" },
+                      subsection_number: {
+                        type: "string",
+                        description: 'e.g., "1.1", "1.2"',
+                      },
+                      subsection_label: { type: "string" },
+                      lines: {
+                        type: "array",
+                        items: {
+                          type: "object",
+                          properties: {
+                            line_id: { type: "string" },
+                            line_number: {
+                              type: "string",
+                              description: 'e.g., "1.1.1"',
+                            },
+                            designation: { type: "string" },
+                            description: { type: "string" },
+                            line_type: {
+                              type: "string",
+                              enum: ["service", "material"],
+                              description:
+                                '"service" = main-d\'œuvre/pose/installation, "material" = fourniture/matériel/équipement',
+                            },
+                            quantity: {
+                              type: "string",
+                              description: "Quantité (nombre). Ex: '5', '10.5'",
+                            },
+                            unit: {
+                              type: "string",
+                              description:
+                                "Unité UNIQUEMENT pour valeurs mesurables: m², m³, m, kg, g, L, mL, pack, h, t, m²/h. JAMAIS pour nombre simple d'articles.",
+                            },
+                            unit_price_ht: {
+                              type: "string",
+                              description:
+                                "Prix unitaire HT en euros (nombre). Ex: '50', '15550', '99.99'",
+                            },
+                            vat_rate: {
+                              type: "string",
+                              description:
+                                "Taux TVA en % (nombre). Ex: '10', '20', '5.5'",
+                            },
+                          },
+                          required: ["line_id", "line_number", "designation"],
+                        },
+                      },
+                    },
+                    required: [
+                      "subsection_id",
+                      "subsection_number",
+                      "subsection_label",
+                    ],
+                  },
                 },
               },
-              required: ["line_id", "designation"],
+              required: ["section_id", "section_number", "section_label"],
+            },
+          },
+          sections_to_update: {
+            type: "array",
+            description:
+              "Sections existantes à mettre à jour via leur section_id.",
+            items: {
+              type: "object",
+              properties: {
+                section_id: {
+                  type: "string",
+                  description: "ID of the section",
+                },
+                section_label: { type: "string" },
+              },
+              required: ["section_id"],
+            },
+          },
+          subsections_to_add: {
+            type: "array",
+            description:
+              "Nouvelles sous-sections à ajouter à des sections existantes.",
+            items: {
+              type: "object",
+              properties: {
+                target_section_id: {
+                  type: "string",
+                  description: "ID de la section parente",
+                },
+                subsection_id: { type: "string" },
+                subsection_number: { type: "string" },
+                subsection_label: { type: "string" },
+                lines: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      line_id: { type: "string" },
+                      line_number: { type: "string" },
+                      designation: { type: "string" },
+                      description: { type: "string" },
+                      line_type: {
+                        type: "string",
+                        enum: ["service", "material"],
+                        description:
+                          '"service" = main-d\'œuvre/pose/installation, "material" = fourniture/matériel/équipement',
+                      },
+                      quantity: {
+                        type: "string",
+                        description: "Quantité (nombre). Ex: '5', '10.5'",
+                      },
+                      unit: {
+                        type: "string",
+                        description:
+                          "Unité UNIQUEMENT pour valeurs mesurables: m², m³, m, kg, g, L, mL, pack, h, t, m²/h. JAMAIS pour nombre simple d'articles.",
+                      },
+                      unit_price_ht: {
+                        type: "string",
+                        description:
+                          "Prix unitaire HT en euros (nombre). Ex: '50', '15550', '99.99'",
+                      },
+                      vat_rate: {
+                        type: "string",
+                        description:
+                          "Taux TVA en % (nombre). Ex: '10', '20', '5.5'",
+                      },
+                    },
+                    required: ["line_id", "line_number", "designation"],
+                  },
+                },
+              },
+              required: [
+                "target_section_id",
+                "subsection_id",
+                "subsection_number",
+                "subsection_label",
+              ],
+            },
+          },
+          subsections_to_update: {
+            type: "array",
+            description:
+              "Sous-sections existantes à mettre à jour via leur subsection_id.",
+            items: {
+              type: "object",
+              properties: {
+                subsection_id: { type: "string" },
+                subsection_label: { type: "string" },
+              },
+              required: ["subsection_id"],
+            },
+          },
+          lines_to_add: {
+            type: "array",
+            description:
+              "Nouvelles lignes à ajouter. Chaque ligne doit avoir designation, description (6-12 mots) et line_type.",
+            items: {
+              type: "object",
+              properties: {
+                target_subsection_id: {
+                  type: "string",
+                  description: "ID de la sous-section parente",
+                },
+                line_id: { type: "string" },
+                line_number: { type: "string" },
+                designation: { type: "string" },
+                description: { type: "string" },
+                line_type: {
+                  type: "string",
+                  enum: ["service", "material"],
+                  description:
+                    '"service" = main-d\'œuvre/pose/installation, "material" = fourniture/matériel/équipement',
+                },
+                quantity: {
+                  type: "string",
+                  description: "Quantité (nombre). Ex: '5', '10.5'",
+                },
+                unit: {
+                  type: "string",
+                  description:
+                    "Unité UNIQUEMENT pour valeurs mesurables: m², m³, m, kg, g, L, mL, pack, h, t, m²/h. JAMAIS pour nombre simple d'articles.",
+                },
+                unit_price_ht: {
+                  type: "string",
+                  description:
+                    "Prix unitaire HT en euros (nombre). Ex: '50', '15550', '99.99'",
+                },
+                vat_rate: {
+                  type: "string",
+                  description: "Taux TVA en % (nombre). Ex: '10', '20', '5.5'",
+                },
+              },
+              required: [
+                "target_subsection_id",
+                "line_id",
+                "line_number",
+                "designation",
+              ],
             },
           },
           lines_to_update: {
             type: "array",
             description:
-              "Existing lines to update. Use index (0-based) to identify the line.",
+              "Lignes existantes à mettre à jour via leur line_id. Permet de modifier designation, description, quantity, unit, unit_price_ht, vat_rate.",
             items: {
               type: "object",
               properties: {
-                index: {
-                  type: "number",
-                  description: "0-based index of the line to update",
-                },
+                line_id: { type: "string" },
                 designation: { type: "string" },
                 description: { type: "string" },
-                quantity: { type: "number" },
-                unit_price_ht: { type: "number" },
-                vat_rate: { type: "number" },
-                is_section: { type: "boolean" },
+                line_type: {
+                  type: "string",
+                  enum: ["service", "material"],
+                  description:
+                    '"service" = main-d\'œuvre/pose/installation, "material" = fourniture/matériel/équipement',
+                },
+                quantity: {
+                  type: "string",
+                  description: "Quantité (nombre). Ex: '5', '10.5'",
+                },
+                unit: {
+                  type: "string",
+                  description:
+                    "Unité UNIQUEMENT pour valeurs mesurables: m², m³, m, kg, g, L, mL, pack, h, t, m²/h. JAMAIS pour nombre simple d'articles.",
+                },
+                unit_price_ht: {
+                  type: "string",
+                  description:
+                    "Prix unitaire HT en euros (nombre). Ex: '50', '15550', '99.99'",
+                },
+                vat_rate: {
+                  type: "string",
+                  description: "Taux TVA en % (nombre). Ex: '10', '20', '5.5'",
+                },
               },
-              required: ["index"],
+              required: ["line_id"],
             },
+          },
+          sections_to_remove: {
+            type: "array",
+            description: "IDs des sections à supprimer",
+            items: { type: "string" },
+          },
+          subsections_to_remove: {
+            type: "array",
+            description: "IDs des sous-sections à supprimer",
+            items: { type: "string" },
           },
           lines_to_remove: {
             type: "array",
-            description: "Indices (0-based) of lines to remove",
-            items: { type: "number" },
+            description: "IDs des lignes à supprimer",
+            items: { type: "string" },
           },
         },
       },
@@ -85,11 +314,14 @@ export const documentTools: ChatCompletionTool[] = [
     function: {
       name: "set_project_title",
       description:
-        "Set or update the project title. Use this to set a descriptive title for the document.",
+        "Définir ou mettre à jour le titre du projet. OBLIGATOIRE après ajout de contenu si le titre est vide. Générer un titre professionnel et concis (2-4 mots) basé sur le contenu: 'Rénovation cuisine', 'Installation électrique', 'Travaux peinture'.",
       parameters: {
         type: "object",
         properties: {
-          title: { type: "string", description: "The project title" },
+          title: {
+            type: "string",
+            description: "Titre du projet (2-4 mots, ex: 'Rénovation cuisine')",
+          },
         },
         required: ["title"],
       },
@@ -99,11 +331,15 @@ export const documentTools: ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "set_deposit",
-      description: "Set the deposit amount (acompte) for the document.",
+      description:
+        "Définir le montant de l'acompte en euros. Utilisé pour les paiements partiels à la commande. Le montant sera déduit du total TTC final.",
       parameters: {
         type: "object",
         properties: {
-          amount: { type: "number", description: "Deposit amount in euros" },
+          amount: {
+            type: "number",
+            description: "Montant de l'acompte en euros",
+          },
         },
         required: ["amount"],
       },
@@ -114,14 +350,14 @@ export const documentTools: ChatCompletionTool[] = [
     function: {
       name: "set_accent_color",
       description:
-        "Change the accent color of the document. Use hex color format.",
+        "Changer la couleur d'accent du document pour personnalisation. Format hexadécimal (#f97316, #3b82f6). Utiliser null pour réinitialiser à la couleur par défaut.",
       parameters: {
         type: "object",
         properties: {
           color: {
             type: "string",
             description:
-              "Hex color code (e.g., #f97316, #3b82f6). Use null to reset to default.",
+              "Code couleur hexadécimal (ex: #f97316, #3b82f6). Utiliser null pour réinitialiser.",
           },
         },
         required: ["color"],
@@ -133,18 +369,18 @@ export const documentTools: ChatCompletionTool[] = [
     function: {
       name: "set_validity_date",
       description:
-        "Set the validity date for a quote. Only works for quotes, not invoices.",
+        "Définir la date de validité d'un devis. UNIQUEMENT pour les devis (pas les factures). Accepte formats: '1 mois', '15 jours', '30/06/2025'. Le devis expire après cette date.",
       parameters: {
         type: "object",
         properties: {
           validity: {
             type: "string",
             description:
-              "Validity period (e.g., '1 mois', '15 jours', '30/06/2025')",
+              "Période de validité (ex: '1 mois', '15 jours', '30/06/2025')",
           },
           valid_until: {
             type: "string",
-            description: "ISO date for database (YYYY-MM-DD)",
+            description: "Date ISO pour la base de données (YYYY-MM-DD)",
           },
         },
         required: ["validity", "valid_until"],
@@ -156,17 +392,17 @@ export const documentTools: ChatCompletionTool[] = [
     function: {
       name: "set_due_date",
       description:
-        "Set the due date for an invoice. Only works for invoices, not quotes.",
+        "Définir la date d'échéance de paiement d'une facture. UNIQUEMENT pour les factures (pas les devis). Indique la date limite de règlement.",
       parameters: {
         type: "object",
         properties: {
           due_date: {
             type: "string",
-            description: "Due date display format (e.g., '15/02/2025')",
+            description: "Date d'échéance format affichage (ex: '15/02/2025')",
           },
           due_date_db: {
             type: "string",
-            description: "ISO date for database (YYYY-MM-DD)",
+            description: "Date ISO pour la base de données (YYYY-MM-DD)",
           },
         },
         required: ["due_date", "due_date_db"],
@@ -178,18 +414,18 @@ export const documentTools: ChatCompletionTool[] = [
     function: {
       name: "create_and_associate_client",
       description:
-        "Create a new client and associate it with the current document. Use this when the client does not exist yet.",
+        "Créer un nouveau client et l'associer au document en cours. Utiliser quand le client n'existe pas dans la liste. Éviter les doublons en vérifiant d'abord la liste des clients existants. Recherche floue disponible.",
       parameters: {
         type: "object",
         properties: {
-          first_name: { type: "string", description: "Client first name" },
-          last_name: { type: "string", description: "Client last name" },
-          email: { type: "string", description: "Client email" },
-          phone: { type: "string", description: "Client phone number" },
+          first_name: { type: "string", description: "Prénom du client" },
+          last_name: { type: "string", description: "Nom du client" },
+          email: { type: "string", description: "Email du client" },
+          phone: { type: "string", description: "Téléphone du client" },
           type: {
             type: "string",
             enum: ["particulier", "professionnel"],
-            description: "Client type",
+            description: "Type de client",
           },
         },
       },
@@ -200,13 +436,13 @@ export const documentTools: ChatCompletionTool[] = [
     function: {
       name: "associate_existing_client",
       description:
-        "Associate an existing client with the current document. Use the client ID from the clients list.",
+        "Associer un client existant au document en cours. Utiliser l'ID du client depuis la liste des clients disponibles. Prioriser cette fonction si le client existe déjà pour éviter les doublons.",
       parameters: {
         type: "object",
         properties: {
           client_id: {
             type: "string",
-            description: "The UUID of the existing client to associate",
+            description: "UUID du client existant à associer",
           },
         },
         required: ["client_id"],
@@ -218,7 +454,7 @@ export const documentTools: ChatCompletionTool[] = [
     function: {
       name: "update_client_info",
       description:
-        "Update information of the currently associated client. Only works if a client is already associated.",
+        "Mettre à jour les informations du client actuellement associé au document. Permet de modifier nom, prénom, email, téléphone ou type. Nécessite qu'un client soit déjà associé.",
       parameters: {
         type: "object",
         properties: {
@@ -236,7 +472,7 @@ export const documentTools: ChatCompletionTool[] = [
     function: {
       name: "download_pdf",
       description:
-        "Download the current document as a PDF file. Use this when the user asks to download, export, or get the PDF of the document.",
+        "Télécharger le document actuel au format PDF. Utiliser quand l'utilisateur demande: télécharger, exporter, PDF, imprimer, envoyer le document. Génère un fichier PDF professionnel prêt à l'envoi.",
       parameters: {
         type: "object",
         properties: {},
@@ -248,7 +484,7 @@ export const documentTools: ChatCompletionTool[] = [
     function: {
       name: "convert_quote_to_invoice",
       description:
-        "Convert the current quote (devis) into an invoice (facture). Only works if the current document is a quote. Use this when the user asks to transform, convert, or turn the quote into an invoice.",
+        "Convertir le devis actuel en facture. UNIQUEMENT si le document est un devis. Utiliser quand l'utilisateur demande: transformer en facture, facturer, convertir, passer en facture. Conserve tout le contenu et génère un nouveau numéro de facture.",
       parameters: {
         type: "object",
         properties: {},
@@ -279,21 +515,124 @@ interface ToolResult {
 }
 
 function recalculateDocumentTotals(document: DocumentData): DocumentData {
+  const updatedSections = document.sections.map((section) => {
+    const updatedSubsections = section.subsections.map((subsection) => {
+      const updatedLines = subsection.lines.map((line) => ({
+        ...line,
+        totalHT: calculateLineTotal(line.quantity, line.unitPriceHT),
+      }));
+      return {
+        ...subsection,
+        lines: updatedLines,
+        totalHT: calculateSubsectionTotal(updatedLines),
+      };
+    });
+    return {
+      ...section,
+      subsections: updatedSubsections,
+      totalHT: calculateSectionTotal(updatedSubsections),
+    };
+  });
+
   const totals = calculateTotals(
-    document.items,
+    updatedSections,
     document.tvaRate,
     document.deposit,
   );
+
   return {
     ...document,
+    sections: updatedSections,
     totalHT: totals.totalHT,
     tvaAmount: totals.tvaAmount,
     totalTTC: totals.totalTTC,
   };
 }
 
-function calculateLineTotal(quantity: number, unitPrice: number): number {
-  return Math.round(quantity * unitPrice * 100) / 100;
+interface RawLine {
+  line_id: string;
+  line_number: string;
+  designation: string;
+  description?: string;
+  line_type?: "service" | "material";
+  quantity?: string | number;
+  unit?: string;
+  unit_price_ht?: string | number;
+  vat_rate?: string | number;
+}
+
+function parseNumber(
+  value: string | number | undefined,
+  fallback: number,
+): number {
+  if (value === undefined || value === null || value === "") return fallback;
+  const num =
+    typeof value === "string" ? parseFloat(value.replace(",", ".")) : value;
+  return isNaN(num) ? fallback : num;
+}
+
+interface RawSubsection {
+  subsection_id: string;
+  subsection_number: string;
+  subsection_label: string;
+  lines?: RawLine[];
+}
+
+interface RawSection {
+  section_id: string;
+  section_number: string;
+  section_label: string;
+  subsections?: RawSubsection[];
+}
+
+function convertRawLineToLineItem(
+  raw: RawLine,
+  defaultVatRate: number,
+): LineItem {
+  const quantity = parseNumber(raw.quantity, 0);
+  const unitPriceHT = parseNumber(raw.unit_price_ht, 0);
+  const vatRate = parseNumber(raw.vat_rate, defaultVatRate);
+  return {
+    lineId: raw.line_id,
+    lineNumber: raw.line_number,
+    designation: raw.designation,
+    description: raw.description,
+    lineType: raw.line_type,
+    quantity,
+    unit: raw.unit,
+    unitPriceHT,
+    vatRate,
+    totalHT: calculateLineTotal(quantity, unitPriceHT),
+  };
+}
+
+function convertRawSubsection(
+  raw: RawSubsection,
+  defaultVatRate: number,
+): Subsection {
+  const lines = (raw.lines || []).map((l) =>
+    convertRawLineToLineItem(l, defaultVatRate),
+  );
+  return {
+    subsectionId: raw.subsection_id,
+    subsectionNumber: raw.subsection_number,
+    subsectionLabel: raw.subsection_label,
+    lines,
+    totalHT: calculateSubsectionTotal(lines),
+  };
+}
+
+function convertRawSection(raw: RawSection, defaultVatRate: number): Section {
+  const subsections = (raw.subsections || []).map((s) =>
+    convertRawSubsection(s, defaultVatRate),
+  );
+  return {
+    sectionId: raw.section_id,
+    sectionNumber: raw.section_number,
+    sectionLabel: raw.section_label,
+    subsections,
+    totalHT: calculateSectionTotal(subsections),
+  };
 }
 
 export async function executeToolCall(
@@ -312,113 +651,181 @@ export async function executeToolCall(
   }
 
   switch (toolName) {
-    case "update_document_lines": {
-      const linesToAdd =
-        (args.lines_to_add as Array<{
-          line_id: string;
-          designation: string;
-          description?: string;
-          quantity?: number;
-          unit_price_ht?: number;
-          vat_rate?: number;
-          is_section?: boolean;
+    case "update_document_content": {
+      const sectionsToAdd = (args.sections_to_add as RawSection[]) || [];
+      const sectionsToUpdate =
+        (args.sections_to_update as Array<{
+          section_id: string;
+          section_label?: string;
         }>) || [];
+      const subsectionsToAdd =
+        (args.subsections_to_add as Array<
+          RawSubsection & { target_section_id: string }
+        >) || [];
+      const subsectionsToUpdate =
+        (args.subsections_to_update as Array<{
+          subsection_id: string;
+          subsection_label?: string;
+        }>) || [];
+      const linesToAdd =
+        (args.lines_to_add as Array<
+          RawLine & { target_subsection_id: string }
+        >) || [];
       const linesToUpdate =
         (args.lines_to_update as Array<{
-          index: number;
+          line_id: string;
           designation?: string;
           description?: string;
-          quantity?: number;
-          unit_price_ht?: number;
-          vat_rate?: number;
-          is_section?: boolean;
+          line_type?: "service" | "material";
+          quantity?: string | number;
+          unit?: string;
+          unit_price_ht?: string | number;
+          vat_rate?: string | number;
         }>) || [];
-      const linesToRemove = (args.lines_to_remove as number[]) || [];
+      const sectionsToRemove = (args.sections_to_remove as string[]) || [];
+      const subsectionsToRemove =
+        (args.subsections_to_remove as string[]) || [];
+      const linesToRemove = (args.lines_to_remove as string[]) || [];
 
-      let updatedItems = [...document.items];
+      let updatedSections = [...document.sections];
 
-      // Remove lines first (in reverse order to maintain indices)
-      const sortedRemoveIndices = [...linesToRemove].sort((a, b) => b - a);
-      for (const idx of sortedRemoveIndices) {
-        if (idx >= 0 && idx < updatedItems.length) {
-          updatedItems.splice(idx, 1);
-        }
-      }
+      // Remove sections
+      updatedSections = updatedSections.filter(
+        (s) => !sectionsToRemove.includes(s.sectionId),
+      );
 
-      // Update existing lines
-      for (const update of linesToUpdate) {
-        const idx = update.index;
-        if (idx >= 0 && idx < updatedItems.length) {
-          const existingItem = updatedItems[idx];
-          const quantity =
-            update.quantity !== undefined
-              ? update.quantity
-              : parseFloat(String(existingItem.quantity || "0")) || 0;
-          const unitPrice =
-            update.unit_price_ht !== undefined
-              ? update.unit_price_ht
-              : existingItem.unitPrice || 0;
-          const tva =
-            update.vat_rate !== undefined
-              ? update.vat_rate
-              : existingItem.tva || document.tvaRate;
+      // Remove subsections
+      updatedSections = updatedSections.map((section) => ({
+        ...section,
+        subsections: section.subsections.filter(
+          (sub) => !subsectionsToRemove.includes(sub.subsectionId),
+        ),
+      }));
 
-          updatedItems[idx] = {
-            ...existingItem,
-            designation:
-              update.designation !== undefined
-                ? update.designation
-                : existingItem.designation,
-            description:
-              update.description !== undefined
-                ? update.description
-                : existingItem.description,
-            quantity: String(quantity),
-            unitPrice,
-            tva,
-            total: calculateLineTotal(quantity, unitPrice),
-            isSection:
-              update.is_section !== undefined
-                ? update.is_section
-                : existingItem.isSection,
+      // Remove lines
+      updatedSections = updatedSections.map((section) => ({
+        ...section,
+        subsections: section.subsections.map((sub) => ({
+          ...sub,
+          lines: sub.lines.filter((l) => !linesToRemove.includes(l.lineId)),
+        })),
+      }));
+
+      // Update sections
+      for (const update of sectionsToUpdate) {
+        const sectionIdx = updatedSections.findIndex(
+          (s) => s.sectionId === update.section_id,
+        );
+        if (sectionIdx >= 0 && update.section_label !== undefined) {
+          updatedSections[sectionIdx] = {
+            ...updatedSections[sectionIdx],
+            sectionLabel: update.section_label,
           };
         }
       }
 
-      // Add new lines
-      for (const newLine of linesToAdd) {
-        const quantity = newLine.quantity || 0;
-        const unitPrice = newLine.unit_price_ht || 0;
-        const tva = newLine.vat_rate || document.tvaRate;
-
-        const lineItem: LineItem = {
-          lineId: newLine.line_id || generateLineId(),
-          id: String(updatedItems.length + 1),
-          designation: newLine.designation,
-          description: newLine.description,
-          quantity: String(quantity),
-          unitPrice,
-          tva,
-          total: calculateLineTotal(quantity, unitPrice),
-          isSection: newLine.is_section || false,
-        };
-        updatedItems.push(lineItem);
+      // Update subsections
+      for (const update of subsectionsToUpdate) {
+        for (let i = 0; i < updatedSections.length; i++) {
+          const subIdx = updatedSections[i].subsections.findIndex(
+            (sub) => sub.subsectionId === update.subsection_id,
+          );
+          if (subIdx >= 0 && update.subsection_label !== undefined) {
+            updatedSections[i].subsections[subIdx] = {
+              ...updatedSections[i].subsections[subIdx],
+              subsectionLabel: update.subsection_label,
+            };
+          }
+        }
       }
 
-      // Re-number lines
-      updatedItems = updatedItems.map((item, idx) => ({
-        ...item,
-        id: String(idx + 1),
-      }));
+      // Update lines
+      for (const update of linesToUpdate) {
+        for (let i = 0; i < updatedSections.length; i++) {
+          for (let j = 0; j < updatedSections[i].subsections.length; j++) {
+            const lineIdx = updatedSections[i].subsections[j].lines.findIndex(
+              (l) => l.lineId === update.line_id,
+            );
+            if (lineIdx >= 0) {
+              const existingLine =
+                updatedSections[i].subsections[j].lines[lineIdx];
+              const quantity =
+                update.quantity !== undefined
+                  ? parseNumber(update.quantity, existingLine.quantity)
+                  : existingLine.quantity;
+              const unitPriceHT =
+                update.unit_price_ht !== undefined
+                  ? parseNumber(update.unit_price_ht, existingLine.unitPriceHT)
+                  : existingLine.unitPriceHT;
+
+              updatedSections[i].subsections[j].lines[lineIdx] = {
+                ...existingLine,
+                designation:
+                  update.designation !== undefined
+                    ? update.designation
+                    : existingLine.designation,
+                description:
+                  update.description !== undefined
+                    ? update.description
+                    : existingLine.description,
+                lineType:
+                  update.line_type !== undefined
+                    ? update.line_type
+                    : existingLine.lineType,
+                quantity,
+                unit:
+                  update.unit !== undefined ? update.unit : existingLine.unit,
+                unitPriceHT,
+                vatRate:
+                  update.vat_rate !== undefined
+                    ? parseNumber(update.vat_rate, existingLine.vatRate)
+                    : existingLine.vatRate,
+                totalHT: calculateLineTotal(quantity, unitPriceHT),
+              };
+            }
+          }
+        }
+      }
+
+      // Add new sections
+      for (const rawSection of sectionsToAdd) {
+        updatedSections.push(convertRawSection(rawSection, document.tvaRate));
+      }
+
+      // Add subsections to existing sections
+      for (const rawSub of subsectionsToAdd) {
+        const sectionIdx = updatedSections.findIndex(
+          (s) => s.sectionId === rawSub.target_section_id,
+        );
+        if (sectionIdx >= 0) {
+          updatedSections[sectionIdx].subsections.push(
+            convertRawSubsection(rawSub, document.tvaRate),
+          );
+        }
+      }
+
+      // Add lines to existing subsections
+      for (const rawLine of linesToAdd) {
+        for (let i = 0; i < updatedSections.length; i++) {
+          const subIdx = updatedSections[i].subsections.findIndex(
+            (sub) => sub.subsectionId === rawLine.target_subsection_id,
+          );
+          if (subIdx >= 0) {
+            updatedSections[i].subsections[subIdx].lines.push(
+              convertRawLineToLineItem(rawLine, document.tvaRate),
+            );
+          }
+        }
+      }
 
       const updatedDocument = recalculateDocumentTotals({
         ...document,
-        items: updatedItems,
+        sections: updatedSections,
       });
 
       return {
         success: true,
-        message: "Lignes mises à jour.",
+        message: "Contenu mis à jour.",
         document: updatedDocument,
       };
     }

@@ -1,44 +1,17 @@
 "use client";
 
+import { Fragment } from "react";
 import Image from "next/image";
 import { EditableField } from "./editable-field";
+import type { Section } from "@/lib/types/document";
 
 const formatPrice = (value: number | undefined): string => {
-  if (value === undefined || value === null) return "0.00";
-  return value.toFixed(2);
+  if (value === undefined || value === null) return "0,00";
+  return value.toLocaleString("fr-FR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 };
-
-// Calcule la luminosité relative d'une couleur (WCAG)
-function getLuminance(hex: string): number {
-  const rgb = hex
-    .replace("#", "")
-    .match(/.{2}/g)
-    ?.map((x) => {
-      const c = parseInt(x, 16) / 255;
-      return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
-    }) || [0, 0, 0];
-  return 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
-}
-
-// Détermine si le texte doit être blanc ou noir pour un bon contraste
-function getContrastColor(bgColor: string): string {
-  const luminance = getLuminance(bgColor);
-  return luminance > 0.4 ? "#1f2937" : "#ffffff";
-}
-
-interface LineItem {
-  lineId: string;
-  id: string;
-  designation: string;
-  description?: string;
-  quantity?: string;
-  unitPrice?: number;
-  tva?: number;
-  total?: number;
-  isSection?: boolean;
-  sectionTotal?: number;
-  sectionTotalTTC?: number;
-}
 
 interface InvoiceData {
   number: string;
@@ -51,6 +24,7 @@ interface InvoiceData {
     phone: string;
     email: string;
     siret: string;
+    rcs?: string;
     logoUrl?: string;
     paymentTerms?: string;
     legalNotice?: string;
@@ -64,7 +38,7 @@ interface InvoiceData {
     siret?: string;
   };
   projectTitle: string;
-  items: LineItem[];
+  sections: Section[];
   totalHT: number;
   tvaRate: number;
   tvaAmount: number;
@@ -74,71 +48,60 @@ interface InvoiceData {
 }
 
 const defaultData: InvoiceData = {
-  number: "0777",
-  date: "01/01/2026",
+  number: "2024-F001",
+  date: "01/01/2024",
   dueDate: "30 jours",
   company: {
-    name: "Entreprise de Matthias Colpaert",
-    address: "181, chemin d'Estantens",
-    city: "31870, Beaumont, France",
-    phone: "06 10 76 06 37",
-    email: "Colpaertmatthias@gmail.com",
-    siret: "777 777 777",
+    name: "Entreprise Exemple SARL",
+    address: "1 rue de la Démonstration",
+    city: "75001 Paris, France",
+    phone: "01 23 45 67 89",
+    email: "contact@exemple-entreprise.fr",
+    siret: "123 456 789 00012",
   },
   client: {
-    address: "181, chemin d'Estantens",
-    city: "31870, Beaumont, France",
-    phone: "06 10 76 06 37",
-    email: "Colpaertmatthias@gmail.com",
-    siret: "777 777 777",
+    name: "Client Exemple",
+    address: "10 avenue du Test",
+    city: "69001 Lyon, France",
+    phone: "01 98 76 54 32",
+    email: "client@exemple.fr",
   },
-  projectTitle: "Rénovation de la cuisine",
-  items: [
+  projectTitle: "Projet exemple",
+  sections: [
     {
-      lineId: "example-section-1",
-      id: "1",
-      designation: "Démolition et préparation",
-      isSection: true,
-      sectionTotal: 360,
-    },
-    {
-      lineId: "example-line-1",
-      id: "1.1",
-      designation: "Dépose carrelage mural",
-      description:
-        "Retrait de l'ancien carrelage, protection des surfaces adjacentes",
-      quantity: "10m²",
-      unitPrice: 15,
-      tva: 20,
-      total: 180,
-    },
-    {
-      lineId: "example-line-2",
-      id: "1.2",
-      designation: "Dépose carrelage mural",
-      description:
-        "Retrait de l'ancien carrelage, protection des surfaces adjacentes",
-      quantity: "10m²",
-      unitPrice: 15,
-      tva: 20,
-      total: 180,
+      sectionId: "example-section-1",
+      sectionNumber: "1",
+      sectionLabel: "Section exemple",
+      totalHT: 500,
+      subsections: [
+        {
+          subsectionId: "example-subsection-1",
+          subsectionNumber: "1.1",
+          subsectionLabel: "Sous-section exemple",
+          totalHT: 500,
+          lines: [
+            {
+              lineId: "example-line-1",
+              lineNumber: "1.1.1",
+              designation: "Prestation exemple",
+              description: "Description de la prestation",
+              quantity: 10,
+              unitPriceHT: 50,
+              vatRate: 20,
+              totalHT: 500,
+            },
+          ],
+        },
+      ],
     },
   ],
-  totalHT: 720,
+  totalHT: 500,
   tvaRate: 20,
-  tvaAmount: 144,
+  tvaAmount: 100,
   deposit: 0,
-  totalTTC: 864,
-  paymentConditions:
-    "Acompte à xx , espèce ou virement bancaire sur le compte : xxxx",
+  totalTTC: 600,
+  paymentConditions: "Conditions de paiement à définir",
 };
-
-// Champs protégés (modifiables uniquement via Paramètres):
-// - Toutes les infos entreprise (company.*)
-// - Numéro de document (number)
-// - Date d'émission (date)
-// - Conditions de paiement (paymentTerms via company)
-// - Mentions légales (legalNotice via company)
 
 type UpdatePath =
   | "dueDate"
@@ -146,20 +109,29 @@ type UpdatePath =
   | "deposit"
   | "tvaRate"
   | `client.${keyof InvoiceData["client"]}`
-  | `items.${number}.designation`
-  | `items.${number}.description`
-  | `items.${number}.quantity`
-  | `items.${number}.unitPrice`
-  | `items.${number}.tva`;
+  | `sections.${string}.label`
+  | `subsections.${string}.label`
+  | `lines.${string}.designation`
+  | `lines.${string}.description`
+  | `lines.${string}.quantity`
+  | `lines.${string}.unitPriceHT`
+  | `lines.${string}.vatRate`;
 
 interface InvoiceTemplateProps {
   data?: InvoiceData;
   onUpdate?: (path: UpdatePath, value: string | number) => void;
   deleteMode?: boolean;
-  selectedLines?: Set<number>;
-  onLineClick?: (lineIndex: number) => void;
-  onLineMouseDown?: (lineIndex: number) => void;
-  onLineMouseEnter?: (lineIndex: number) => void;
+  isItemSelected?: (
+    type: "section" | "subsection" | "line",
+    id: string,
+  ) => boolean;
+  onSectionClick?: (sectionId: string) => void;
+  onSubsectionClick?: (subsectionId: string, sectionId: string) => void;
+  onLineClick?: (
+    lineId: string,
+    subsectionId: string,
+    sectionId: string,
+  ) => void;
   accentColor?: string | null;
 }
 
@@ -167,74 +139,103 @@ export function InvoiceTemplate({
   data = defaultData,
   onUpdate,
   deleteMode = false,
-  selectedLines = new Set(),
+  isItemSelected,
+  onSectionClick,
+  onSubsectionClick,
   onLineClick,
-  onLineMouseDown,
-  onLineMouseEnter,
   accentColor,
 }: InvoiceTemplateProps) {
-  const hasCustomColor = accentColor !== null && accentColor !== undefined;
-  const textColor = hasCustomColor ? getContrastColor(accentColor) : undefined;
+  const themeColor = accentColor || "#000000";
+
   const handleUpdate = (path: UpdatePath, value: string | number) => {
     if (onUpdate) {
       onUpdate(path, value);
     }
   };
 
-  const handleRowMouseDown = (index: number) => {
-    if (deleteMode && onLineMouseDown) {
-      onLineMouseDown(index);
+  const handleSectionClick = (sectionId: string) => {
+    if (deleteMode && onSectionClick) {
+      onSectionClick(sectionId);
     }
   };
 
-  const handleRowMouseEnter = (index: number) => {
-    if (deleteMode && onLineMouseEnter) {
-      onLineMouseEnter(index);
+  const handleSubsectionClick = (
+    subsectionId: string,
+    sectionId: string,
+    e: React.MouseEvent,
+  ) => {
+    if (deleteMode && onSubsectionClick) {
+      e.stopPropagation();
+      onSubsectionClick(subsectionId, sectionId);
     }
   };
 
-  const handleRowClick = (index: number) => {
+  const handleLineClick = (
+    lineId: string,
+    subsectionId: string,
+    sectionId: string,
+    e: React.MouseEvent,
+  ) => {
     if (deleteMode && onLineClick) {
-      onLineClick(index);
+      e.stopPropagation();
+      onLineClick(lineId, subsectionId, sectionId);
     }
   };
+
+  const isSectionSelected = (sectionId: string) =>
+    isItemSelected?.("section", sectionId) ?? false;
+  const isSubsectionSelected = (subsectionId: string) =>
+    isItemSelected?.("subsection", subsectionId) ?? false;
+  const isLineSelected = (lineId: string) =>
+    isItemSelected?.("line", lineId) ?? false;
 
   return (
     <div className="w-full max-w-[210mm] mx-auto bg-card text-card-foreground p-8 text-sm font-sans">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-8">
         {data.company.logoUrl ? (
-          <Image
-            src={data.company.logoUrl}
-            alt="Logo entreprise"
-            width={160}
-            height={80}
-            className="w-40 h-20 object-contain object-left"
-            unoptimized
-          />
+          <>
+            <Image
+              src={data.company.logoUrl}
+              alt="Logo entreprise"
+              width={160}
+              height={80}
+              className="w-40 h-20 object-contain object-left"
+              unoptimized
+            />
+            <div className="sm:text-right">
+              <h1 className="text-xl font-bold">Facture n° {data.number}</h1>
+              <p className="text-muted-foreground">
+                Date d&apos;émission : {data.date}
+              </p>
+              <p className="text-muted-foreground">
+                Échéance :{" "}
+                <EditableField
+                  value={data.dueDate}
+                  onSave={(v) => handleUpdate("dueDate", v)}
+                />
+              </p>
+            </div>
+          </>
         ) : (
-          <div className="w-40 h-20 bg-muted flex items-center justify-center text-muted-foreground font-semibold">
-            LOGO
+          <div>
+            <h1 className="text-xl font-bold">Facture n° {data.number}</h1>
+            <p className="text-muted-foreground">
+              Date d&apos;émission : {data.date}
+            </p>
+            <p className="text-muted-foreground">
+              Échéance :{" "}
+              <EditableField
+                value={data.dueDate}
+                onSave={(v) => handleUpdate("dueDate", v)}
+              />
+            </p>
           </div>
         )}
-        <div className="sm:text-right">
-          <h1 className="text-xl font-bold">Facture n° {data.number}</h1>
-          <p className="text-muted-foreground">
-            Date d&apos;émission : {data.date}
-          </p>
-          <p className="text-muted-foreground">
-            Échéance :{" "}
-            <EditableField
-              value={data.dueDate}
-              onSave={(v) => handleUpdate("dueDate", v)}
-            />
-          </p>
-        </div>
       </div>
 
       {/* Company and Client Info */}
       <div className="grid grid-cols-2 gap-8 mb-8">
-        {/* Company - Champs protégés (modifiables uniquement via Paramètres) */}
         <div>
           <h2 className="font-bold text-lg mb-3">{data.company.name}</h2>
           <div className="space-y-1 text-muted-foreground">
@@ -243,10 +244,10 @@ export function InvoiceTemplate({
             <p>{data.company.phone}</p>
             <p>{data.company.email}</p>
             <p>SIRET: {data.company.siret}</p>
+            {data.company.rcs && <p>RCS: {data.company.rcs}</p>}
           </div>
         </div>
 
-        {/* Client */}
         <div>
           <h2 className="font-bold text-lg mb-3">
             <EditableField
@@ -284,150 +285,214 @@ export function InvoiceTemplate({
       </h2>
 
       {/* Items Table */}
-      <div className="border border-border rounded-lg overflow-hidden mb-4">
+      <div className="mb-6">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[600px]">
             <thead>
-              <tr
-                className={!hasCustomColor ? "bg-muted" : ""}
-                style={
-                  hasCustomColor
-                    ? { backgroundColor: accentColor, color: textColor }
-                    : undefined
-                }
-              >
-                <th
-                  className={`px-3 py-2 font-semibold whitespace-nowrap ${!hasCustomColor ? "text-muted-foreground" : ""}`}
-                >
-                  #
+              <tr>
+                <th className="px-2 py-3 text-left text-xs font-semibold uppercase tracking-wider text-foreground">
+                  N°
                 </th>
-                <th
-                  className={`px-3 py-2 font-semibold ${!hasCustomColor ? "text-muted-foreground" : ""}`}
-                >
+                <th className="px-2 py-3 text-left text-xs font-semibold uppercase tracking-wider text-foreground">
                   Désignation
                 </th>
-                <th
-                  className={`px-3 py-2 font-semibold text-center whitespace-nowrap ${!hasCustomColor ? "text-muted-foreground" : ""}`}
-                >
-                  Quantité
+                <th className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-wider text-foreground">
+                  Qté
                 </th>
-                <th
-                  className={`px-3 py-2 font-semibold text-center whitespace-nowrap ${!hasCustomColor ? "text-muted-foreground" : ""}`}
-                >
-                  Prix unit. HT
+                <th className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-wider text-foreground">
+                  Prix U.
                 </th>
-                <th
-                  className={`px-3 py-2 font-semibold text-center whitespace-nowrap ${!hasCustomColor ? "text-muted-foreground" : ""}`}
-                >
+                <th className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-wider text-foreground">
                   TVA
                 </th>
-                <th
-                  className={`px-3 py-2 font-semibold text-right whitespace-nowrap ${!hasCustomColor ? "text-muted-foreground" : ""}`}
-                >
-                  Total TTC
+                <th className="px-2 py-3 text-right text-xs font-semibold uppercase tracking-wider text-foreground">
+                  Total HT
                 </th>
               </tr>
             </thead>
             <tbody>
-              {data.items.map((item, index) => (
-                <tr
-                  key={item.lineId}
-                  className={`border-t border-border select-none ${
-                    deleteMode
-                      ? selectedLines.has(index)
-                        ? "bg-destructive/20 cursor-pointer"
-                        : "cursor-pointer hover:bg-destructive/10"
-                      : ""
-                  } transition-colors`}
-                  onClick={() => handleRowClick(index)}
-                  onMouseDown={() => handleRowMouseDown(index)}
-                  onMouseEnter={() => handleRowMouseEnter(index)}
-                >
-                  {item.isSection ? (
-                    <>
-                      <td className="px-3 py-2 font-bold">{item.id}</td>
-                      <td className="px-3 py-2 font-bold">
-                        <EditableField
-                          value={item.designation}
-                          onSave={(v) =>
-                            handleUpdate(`items.${index}.designation`, v)
-                          }
-                        />
-                      </td>
-                      <td></td>
-                      <td></td>
-                      <td></td>
-                      <td className="px-3 py-2 font-bold text-right">
-                        {formatPrice(item.sectionTotalTTC ?? item.sectionTotal)}{" "}
-                        €
-                      </td>
-                    </>
-                  ) : (
-                    <>
-                      <td className="px-3 py-2 text-muted-foreground">
-                        {item.id}
-                      </td>
-                      <td className="px-3 py-2">
-                        <div className="font-medium">
+              {data.sections.map((section) => (
+                <Fragment key={section.sectionId}>
+                  <tr
+                    className={`font-semibold select-none ${
+                      deleteMode
+                        ? isSectionSelected(section.sectionId)
+                          ? "ring-2 ring-inset ring-destructive cursor-pointer"
+                          : "cursor-pointer hover:ring-2 hover:ring-inset hover:ring-destructive/50"
+                        : ""
+                    } transition-all duration-200`}
+                    style={{
+                      borderBottom: `2px solid ${themeColor}`,
+                    }}
+                    onClick={() => handleSectionClick(section.sectionId)}
+                  >
+                    <td className="px-2 py-3" style={{ color: themeColor }}>
+                      {section.sectionNumber}
+                    </td>
+                    <td
+                      className="px-2 py-3"
+                      colSpan={4}
+                      style={{ color: themeColor }}
+                    >
+                      <EditableField
+                        value={section.sectionLabel}
+                        onSave={(v) =>
+                          handleUpdate(`sections.${section.sectionId}.label`, v)
+                        }
+                      />
+                    </td>
+                    <td
+                      className="px-2 py-3 text-right"
+                      style={{ color: themeColor }}
+                    >
+                      {formatPrice(section.totalHT)} €
+                    </td>
+                  </tr>
+
+                  {section.subsections.map((subsection) => (
+                    <Fragment key={subsection.subsectionId}>
+                      <tr
+                        className={`font-medium select-none ${
+                          deleteMode
+                            ? isSubsectionSelected(subsection.subsectionId)
+                              ? "ring-2 ring-inset ring-destructive cursor-pointer"
+                              : "cursor-pointer hover:ring-2 hover:ring-inset hover:ring-destructive/50"
+                            : ""
+                        } transition-all duration-200`}
+                        style={{
+                          borderBottom: `1px solid ${themeColor}CC`,
+                        }}
+                        onClick={(e) =>
+                          handleSubsectionClick(
+                            subsection.subsectionId,
+                            section.sectionId,
+                            e,
+                          )
+                        }
+                      >
+                        <td
+                          className="px-2 py-2"
+                          style={{ color: `${themeColor}CC` }}
+                        >
+                          {subsection.subsectionNumber}
+                        </td>
+                        <td
+                          className="px-2 py-2"
+                          colSpan={4}
+                          style={{ color: `${themeColor}CC` }}
+                        >
                           <EditableField
-                            value={item.designation}
+                            value={subsection.subsectionLabel}
                             onSave={(v) =>
-                              handleUpdate(`items.${index}.designation`, v)
+                              handleUpdate(
+                                `subsections.${subsection.subsectionId}.label`,
+                                v,
+                              )
                             }
-                            placeholder="Désignation"
                           />
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          <EditableField
-                            value={item.description}
-                            onSave={(v) =>
-                              handleUpdate(`items.${index}.description`, v)
-                            }
-                            placeholder="Description"
-                          />
-                        </div>
-                      </td>
-                      <td className="px-3 py-2 text-center text-muted-foreground">
-                        <EditableField
-                          value={item.quantity}
-                          onSave={(v) =>
-                            handleUpdate(`items.${index}.quantity`, v)
-                          }
-                        />
-                      </td>
-                      <td className="px-3 py-2 text-center text-muted-foreground">
-                        <EditableField
-                          value={formatPrice(item.unitPrice)}
-                          onSave={(v) =>
-                            handleUpdate(
-                              `items.${index}.unitPrice`,
-                              parseFloat(v) || 0,
+                        </td>
+                        <td
+                          className="px-2 py-2 text-right font-semibold"
+                          style={{ color: `${themeColor}CC` }}
+                        >
+                          {formatPrice(subsection.totalHT)} €
+                        </td>
+                      </tr>
+
+                      {subsection.lines.map((line) => (
+                        <tr
+                          key={line.lineId}
+                          className={`select-none border-b border-border/30 ${
+                            deleteMode
+                              ? isLineSelected(line.lineId)
+                                ? "bg-destructive/20 cursor-pointer"
+                                : "cursor-pointer hover:bg-destructive/10"
+                              : "hover:bg-muted/20"
+                          } transition-all duration-200`}
+                          onClick={(e) =>
+                            handleLineClick(
+                              line.lineId,
+                              subsection.subsectionId,
+                              section.sectionId,
+                              e,
                             )
                           }
-                          suffix=" €"
-                        />
-                      </td>
-                      <td className="px-3 py-2 text-center text-muted-foreground">
-                        <EditableField
-                          value={item.tva}
-                          onSave={(v) =>
-                            handleUpdate(
-                              `items.${index}.tva`,
-                              parseFloat(v) || 0,
-                            )
-                          }
-                          suffix="%"
-                        />
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        {formatPrice(
-                          (item.total || 0) * (1 + (item.tva || 0) / 100),
-                        )}{" "}
-                        €
-                      </td>
-                    </>
-                  )}
-                </tr>
+                        >
+                          <td className="px-2 py-3 text-muted-foreground text-sm">
+                            {line.lineNumber}
+                          </td>
+                          <td className="px-2 py-3">
+                            <div className="font-medium text-sm">
+                              <EditableField
+                                value={line.designation}
+                                onSave={(v) =>
+                                  handleUpdate(
+                                    `lines.${line.lineId}.designation`,
+                                    v,
+                                  )
+                                }
+                                placeholder="Désignation"
+                              />
+                            </div>
+                            {line.description && (
+                              <div className="text-xs text-muted-foreground mt-0.5">
+                                <EditableField
+                                  value={line.description}
+                                  onSave={(v) =>
+                                    handleUpdate(
+                                      `lines.${line.lineId}.description`,
+                                      v,
+                                    )
+                                  }
+                                  placeholder="Description"
+                                />
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-2 py-3 text-center text-sm">
+                            <EditableField
+                              value={String(line.quantity)}
+                              onSave={(v) =>
+                                handleUpdate(
+                                  `lines.${line.lineId}.quantity`,
+                                  parseFloat(v) || 0,
+                                )
+                              }
+                              suffix={line.unit ? ` ${line.unit}` : undefined}
+                            />
+                          </td>
+                          <td className="px-2 py-3 text-center text-sm">
+                            <EditableField
+                              value={formatPrice(line.unitPriceHT)}
+                              onSave={(v) =>
+                                handleUpdate(
+                                  `lines.${line.lineId}.unitPriceHT`,
+                                  parseFloat(v.replace(",", ".")) || 0,
+                                )
+                              }
+                              suffix=" €"
+                            />
+                          </td>
+                          <td className="px-2 py-3 text-center text-sm text-muted-foreground">
+                            <EditableField
+                              value={String(line.vatRate)}
+                              onSave={(v) =>
+                                handleUpdate(
+                                  `lines.${line.lineId}.vatRate`,
+                                  parseFloat(v) || 0,
+                                )
+                              }
+                              suffix=" %"
+                            />
+                          </td>
+                          <td className="px-2 py-3 text-right text-sm font-medium">
+                            {formatPrice(line.totalHT)} €
+                          </td>
+                        </tr>
+                      ))}
+                    </Fragment>
+                  ))}
+                </Fragment>
               ))}
             </tbody>
           </table>
