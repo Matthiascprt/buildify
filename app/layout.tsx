@@ -13,6 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://buildify.solutions"),
   title: "Buildify - Devis et Factures pour Artisans",
   description:
     "Créez vos devis et factures en moins de 2 minutes grâce à l'IA. Simple, rapide, mobile-first.",

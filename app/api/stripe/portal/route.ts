@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
     }
 
     const headersList = await headers();
-    const origin = headersList.get("origin") || "http://localhost:3000";
+    const origin = headersList.get("origin") || "https://buildify.solutions";
 
     const body = await req.json().catch(() => ({}));
     const { priceId } = body as { priceId?: string };

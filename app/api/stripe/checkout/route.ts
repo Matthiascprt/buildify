@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
     const priceId = getPriceId(plan, billingCycle);
 
     const headersList = await headers();
-    const origin = headersList.get("origin") || "http://localhost:3000";
+    const origin = headersList.get("origin") || "https://buildify.solutions";
 
     const supabase = await createClient();
     const { data: existingSub } = await supabase

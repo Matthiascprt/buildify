@@ -283,7 +283,7 @@ function OnboardingContent() {
             first_name: signupData.firstName,
             last_name: signupData.lastName,
           },
-          emailRedirectTo: `${window.location.origin}/auth/callback?next=/login`,
+          emailRedirectTo: `${window.location.origin}/auth/callback?next=/setup`,
         },
       });
 
