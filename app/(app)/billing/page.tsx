@@ -69,7 +69,7 @@ function getPlanDisplayName(plan: string | null): string {
 function getBillingCycle(priceId: string | null): "monthly" | "yearly" {
   if (!priceId) return "monthly";
   if (priceId.includes("yearly") || priceId.includes("annual")) return "yearly";
-  const yearlyPriceIds = [
+  const yearlyPriceIds: string[] = [
     STRIPE_PRICE_IDS.standard.yearly,
     STRIPE_PRICE_IDS.pro.yearly,
   ];
