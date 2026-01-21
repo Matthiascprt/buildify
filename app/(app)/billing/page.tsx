@@ -70,8 +70,8 @@ function getBillingCycle(priceId: string | null): "monthly" | "yearly" {
   if (!priceId) return "monthly";
   if (priceId.includes("yearly") || priceId.includes("annual")) return "yearly";
   const yearlyPriceIds = [
-    "price_1SqXZABaT1g3foMXZ4lhgrm5",
-    "price_1SqXbDBaT1g3foMX5n6lI4dK",
+    STRIPE_PRICE_IDS.standard.yearly,
+    STRIPE_PRICE_IDS.pro.yearly,
   ];
   return yearlyPriceIds.includes(priceId) ? "yearly" : "monthly";
 }
