@@ -1,11 +1,11 @@
 export const STRIPE_PRICE_IDS = {
   standard: {
-    monthly: "price_1SqXMaBaT1g3foMXaaiK6v5J",
-    yearly: "price_1SqXZABaT1g3foMXZ4lhgrm5",
+    monthly: "price_1Ss65GB3puLNMu4qICqR1ohx",
+    yearly: "price_1Ss65eB3puLNMu4qWx0fBB4z",
   },
   pro: {
-    monthly: "price_1SqXPJBaT1g3foMXbwDerd0y",
-    yearly: "price_1SqXbDBaT1g3foMX5n6lI4dK",
+    monthly: "price_1Ss68AB3puLNMu4qGWoL912p",
+    yearly: "price_1Ss68mB3puLNMu4qiGAPPDj9",
   },
 } as const;
 
